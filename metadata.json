@@ -1,0 +1,7 @@
+{
+  "name": "KDP Author Pro",
+  "description": "An advanced AI-powered platform for planning, writing, and formatting books specifically for Amazon KDP. Features include AI outline generation, chapter expansion, metadata optimization, and a Kindle-style previewer.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

@@ -1,0 +1,103 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KDP Author Pro | AI Publishing Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Merriweather:ital,wght@0,300;0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <style id="print-settings">
+    :root {
+      --primary: #6366f1;
+      --secondary: #0f172a;
+    }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #0f172a;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    .kindle-font {
+      font-family: 'Merriweather', serif;
+    }
+    /* Modern Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.5);
+    }
+
+    /* Glass Effects */
+    .glass {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glass-dark {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    /* Animations */
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide {
+      animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    
+    @keyframes pulse-glow {
+      0% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+      70% { box-shadow: 0 0 0 15px rgba(99, 102, 241, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+    }
+    .glow-indigo {
+      animation: pulse-glow 2s infinite;
+    }
+
+    /* Layout Tweaks */
+    @media print {
+      @page { size: auto; margin: 20mm; }
+      body { background: white !important; color: black !important; overflow: visible !important; }
+      #root { display: none !important; }
+      #print-section { 
+        display: block !important; 
+        position: relative !important; 
+        width: 100% !important; 
+        background: white !important; 
+        color: black !important;
+      }
+      .page-break { page-break-before: always; }
+      .no-print { display: none !important; }
+    }
+    #print-section { display: none; }
+  </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://esm.sh/@google/genai@^1.37.0",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body class="selection:bg-indigo-500/30">
+  <div id="root"></div>
+  <div id="print-section"></div>
+</body>
+</html>
