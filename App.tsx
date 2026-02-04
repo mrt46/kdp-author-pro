@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Book, AppState, AgentLog, Chapter, TelemetryMetrics, DetectedChapter } from './types';
+import React, { useState, useEffect, useRef } from 'react';
+import { Book, AppState, AgentLog, Chapter, TelemetryMetrics, LaunchKit, LegalAudit } from './types';
 import { geminiService, RefactorAnalysis } from './services/geminiService';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -14,20 +14,60 @@ import ExportLab from './components/ExportLab';
 import VoiceCoach from './components/VoiceCoach';
 import LoreBibleView from './components/LoreBibleView';
 import RefactorerView from './components/RefactorerView';
+import LegalCounselView from './components/LegalCounselView';
+import MarketingView from './components/MarketingView';
+import IllustratorPanel from './components/IllustratorPanel';
 
-const MAX_RETRIES = 5; // Artırıldı
+const STORAGE_KEY = 'kdp-author-pro-books';
+const STORAGE_ACTIVE = 'kdp-author-pro-active';
+
+function loadBooks(): Book[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function loadActiveBookId(): string | null {
+  return localStorage.getItem(STORAGE_ACTIVE);
+}
+
+const MAX_RETRIES = 5;
 
 const App: React.FC = () => {
   const [view, setView] = useState<AppState>('dashboard');
-  const [books, setBooks] = useState<Book[]>([]);
-  const [activeBookId, setActiveBookId] = useState<string | null>(null);
+  const [books, setBooks] = useState<Book[]>(loadBooks);
+  const [activeBookId, setActiveBookId] = useState<string | null>(loadActiveBookId);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [logs, setLogs] = useState<AgentLog[]>([]);
   const [pendingStrategy, setPendingStrategy] = useState<any>(null);
+  const [launchKit, setLaunchKit] = useState<LaunchKit | null>(null);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [telemetry, setTelemetry] = useState<TelemetryMetrics>({
     actionLevel: 50, boredomLevel: 0, loreConsistency: 100, kdpCompliance: 100, activeAgent: 'Idle'
   });
+  const booksRef = useRef(books);
+  booksRef.current = books;
+
+  // localStorage persistence
+  useEffect(() => {
+    setSaveStatus('saving');
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
+        setSaveStatus('saved');
+      } catch {
+        setSaveStatus('idle');
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [books]);
+
+  useEffect(() => {
+    if (activeBookId) localStorage.setItem(STORAGE_ACTIVE, activeBookId);
+    else localStorage.removeItem(STORAGE_ACTIVE);
+  }, [activeBookId]);
 
   const activeBook = books.find(b => b.id === activeBookId) || null;
 
@@ -52,7 +92,7 @@ const App: React.FC = () => {
     });
 
     while (attempts < MAX_RETRIES && !isApproved) {
-      const currentBook = books.find(b => b.id === bookId);
+      const currentBook = booksRef.current.find(b => b.id === bookId);
       if (!currentBook) break;
 
       try {
@@ -137,7 +177,7 @@ const App: React.FC = () => {
     });
 
     while (attempts < MAX_RETRIES && !isApproved) {
-      const currentBook = books.find(b => b.id === bookId);
+      const currentBook = booksRef.current.find(b => b.id === bookId);
       if (!currentBook) break;
 
       try {
@@ -336,24 +376,239 @@ const App: React.FC = () => {
     setTelemetry(p => ({ ...p, activeAgent: 'Idle' }));
   };
 
+  // --- Chapter Management ---
+  const handleAddChapter = () => {
+    if (!activeBook) return;
+    updateBook(activeBook.id, b => ({
+      ...b,
+      chapters: [...b.chapters, {
+        id: crypto.randomUUID(),
+        title: `New Chapter ${b.chapters.length + 1}`,
+        content: '',
+        wordCount: 0,
+        status: 'empty' as const,
+      }]
+    }));
+  };
+
+  const handleDeleteChapter = (index: number) => {
+    if (!activeBook || activeBook.chapters.length <= 1) return;
+    updateBook(activeBook.id, b => ({
+      ...b,
+      chapters: b.chapters.filter((_, i) => i !== index)
+    }));
+    if (activeChapterIndex >= activeBook.chapters.length - 1) {
+      setActiveChapterIndex(Math.max(0, activeBook.chapters.length - 2));
+    }
+  };
+
+  const handleMoveChapter = (fromIndex: number, toIndex: number) => {
+    if (!activeBook) return;
+    updateBook(activeBook.id, b => {
+      const chs = [...b.chapters];
+      const [moved] = chs.splice(fromIndex, 1);
+      chs.splice(toIndex, 0, moved);
+      return { ...b, chapters: chs };
+    });
+    if (activeChapterIndex === fromIndex) setActiveChapterIndex(toIndex);
+  };
+
+  // --- SEO Optimization ---
+  const handleOptimizeSEO = async () => {
+    if (!activeBook) return;
+    setIsGenerating(true);
+    addLog('SEO Analyst', 'Analyzing keywords and competitor gaps...', 'info');
+    try {
+      const result = await geminiService.generateSEOKeywords(
+        activeBook.metadata.title,
+        activeBook.metadata.description,
+        activeBook.metadata.language
+      );
+      updateBook(activeBook.id, b => ({
+        ...b,
+        metadata: {
+          ...b.metadata,
+          strategy: {
+            ...b.metadata.strategy!,
+            backendKeywords: result.backendKeywords.slice(0, 7),
+            competitorGaps: result.competitorGaps,
+          }
+        }
+      }));
+      addLog('SEO Analyst', `Generated ${result.backendKeywords.length} backend keywords.`, 'success');
+    } catch (e: any) {
+      addLog('SEO Analyst', `SEO generation failed: ${e.message}`, 'critical');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // --- Legal Audit ---
+  const handleRunLegalAudit = async () => {
+    if (!activeBook) return;
+    setIsGenerating(true);
+    setTelemetry(p => ({ ...p, activeAgent: 'Legal' }));
+    addLog('Legal Counsel', 'Initiating compliance deep-scan...', 'info');
+    try {
+      const fullContent = activeBook.chapters.map(c => c.content).join('\n\n');
+      const result = await geminiService.runLegalAudit(fullContent, activeBook.metadata.title);
+      const audit: LegalAudit = {
+        id: crypto.randomUUID(),
+        riskLevel: result.riskLevel,
+        findings: result.findings,
+        timestamp: Date.now(),
+      };
+      updateBook(activeBook.id, b => ({
+        ...b,
+        legalAudits: [audit, ...b.legalAudits]
+      }));
+      addLog('Legal Counsel', `Audit complete. Risk: ${result.riskLevel}`, result.riskLevel === 'low' ? 'success' : result.riskLevel === 'medium' ? 'warning' : 'critical');
+    } catch (e: any) {
+      addLog('Legal Counsel', `Audit failed: ${e.message}`, 'critical');
+    } finally {
+      setIsGenerating(false);
+      setTelemetry(p => ({ ...p, activeAgent: 'Idle' }));
+    }
+  };
+
+  // --- Marketing: Trailer & Launch Kit ---
+  const handleSuggestTrailerPrompt = async (): Promise<string> => {
+    if (!activeBook) return '';
+    try {
+      return await geminiService.suggestTrailerPrompt(activeBook.metadata.title, activeBook.metadata.description);
+    } catch (e: any) {
+      addLog('Marketing', `Prompt suggestion failed: ${e.message}`, 'critical');
+      return '';
+    }
+  };
+
+  const handleGenerateTrailer = async (prompt: string) => {
+    if (!activeBook || !prompt) return;
+    setIsGenerating(true);
+    addLog('Marketing', 'Rendering cinematic trailer...', 'info');
+    try {
+      // Veo video generation is not available via current API; store prompt as placeholder trailer
+      const trailer = { id: crypto.randomUUID(), videoUrl: '', prompt };
+      updateBook(activeBook.id, b => ({ ...b, trailers: [...b.trailers, trailer] }));
+      addLog('Marketing', 'Trailer prompt saved. Video rendering requires Veo API access.', 'warning');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateLaunchKit = async () => {
+    if (!activeBook) return;
+    setIsGenerating(true);
+    addLog('Marketing', 'Synthesizing launch kit...', 'info');
+    try {
+      const kit = await geminiService.generateLaunchKit(
+        activeBook.metadata.title,
+        activeBook.metadata.description,
+        activeBook.metadata.language
+      );
+      setLaunchKit(kit);
+      addLog('Marketing', 'Launch kit generated successfully.', 'success');
+    } catch (e: any) {
+      addLog('Marketing', `Launch kit failed: ${e.message}`, 'critical');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // --- Micro Revision in Editor ---
+  const handleApplyRevision = async (request: string) => {
+    if (!activeBook) return;
+    const chapter = activeBook.chapters[activeChapterIndex];
+    if (!chapter.content) return;
+    setIsGenerating(true);
+    addLog('Revision Specialist', `Applying micro-revision: "${request.slice(0, 60)}..."`, 'info');
+    try {
+      const revised = await geminiService.refactorChapter(
+        chapter.content,
+        activeBook.metadata,
+        [],
+        { title: '', summary: '', detectedNiche: '', currentTone: '', estimatedChapters: 1, suggestedActions: [] },
+        [],
+        request,
+        1,
+      );
+      updateBook(activeBook.id, b => {
+        const chs = [...b.chapters];
+        chs[activeChapterIndex] = { ...chs[activeChapterIndex], content: revised, wordCount: revised.split(/\s+/).length };
+        return { ...b, chapters: chs };
+      });
+      addLog('Revision Specialist', 'Micro-revision applied.', 'success');
+    } catch (e: any) {
+      addLog('Revision Specialist', `Revision failed: ${e.message}`, 'critical');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f172a] text-slate-100 font-sans">
-      <Header view={view} setView={setView} bookTitle={activeBook?.metadata.title} hasBook={!!activeBook} onExport={() => {}} onExportPDF={() => setView('export-lab')} backgroundTasksCount={isGenerating ? 1 : 0} />
+      <Header view={view} setView={setView} bookTitle={activeBook?.metadata.title} hasBook={!!activeBook} onExport={() => {}} onExportPDF={() => setView('export-lab')} saveStatus={saveStatus} backgroundTasksCount={isGenerating ? 1 : 0} />
       <div className="flex flex-1 overflow-hidden">
         {activeBook && !['dashboard', 'strategy', 'orchestrator', 'book-config', 'book-refactorer'].includes(view) && (
-          <Sidebar activeBook={activeBook} activeChapterIndex={activeChapterIndex} setActiveChapterIndex={setActiveChapterIndex} onAddChapter={() => {}} />
+          <Sidebar
+            activeBook={activeBook}
+            activeChapterIndex={activeChapterIndex}
+            setActiveChapterIndex={setActiveChapterIndex}
+            onAddChapter={handleAddChapter}
+            onDeleteChapter={handleDeleteChapter}
+            onMoveChapter={handleMoveChapter}
+          />
         )}
         <main className="flex-1 overflow-y-auto bg-slate-50 text-slate-900 relative">
           {view === 'dashboard' && <Dashboard onNewBook={() => setView('strategy')} onImportBook={() => setView('book-refactorer')} activeBook={activeBook} onContinue={() => setView('editor')} onSelectResource={() => {}} />}
           {view === 'strategy' && <StrategyPlanner onStrategySelected={(s, t, l) => { setPendingStrategy({ strategy: s, title: t, language: l }); setView('book-config'); }} addLog={addLog} logs={logs} />}
           {view === 'book-config' && pendingStrategy && <BookConfigView title={pendingStrategy.title} onStart={handleStartProduction} onBack={() => setView('strategy')} />}
           {view === 'orchestrator' && <OrchestratorView logs={logs} isGenerating={isGenerating} book={activeBook} onFinish={() => setView('editor')} telemetry={telemetry} />}
-          {view === 'editor' && activeBook && <Editor chapter={activeBook.chapters[activeChapterIndex]} onUpdate={(c) => updateBook(activeBook.id, b => { const chs = [...b.chapters]; chs[activeChapterIndex].content = c; return { ...b, chapters: chs }; })} onAIRite={() => runChapterLoop(activeBook.id, activeChapterIndex)} onApplyRevision={() => {}} isGenerating={isGenerating} onFullAudit={() => {}} telemetry={telemetry} logs={logs} />}
+          {view === 'editor' && activeBook && (
+            <Editor
+              chapter={activeBook.chapters[activeChapterIndex]}
+              onUpdate={(c) => updateBook(activeBook.id, b => { const chs = [...b.chapters]; chs[activeChapterIndex].content = c; chs[activeChapterIndex].wordCount = c.split(/\s+/).filter(Boolean).length; return { ...b, chapters: chs }; })}
+              onAIRite={() => runChapterLoop(activeBook.id, activeChapterIndex)}
+              onApplyRevision={handleApplyRevision}
+              isGenerating={isGenerating}
+              onFullAudit={() => {}}
+              saveStatus={saveStatus}
+              telemetry={telemetry}
+              logs={logs}
+            />
+          )}
           {view === 'preview' && activeBook && <Preview book={activeBook} />}
           {view === 'export-lab' && activeBook && <ExportLab book={activeBook} onBack={() => setView('editor')} />}
           {view === 'lore-bible' && activeBook && <LoreBibleView lore={activeBook.loreBible} onRefresh={() => {}} isGenerating={isGenerating} />}
           {view === 'book-refactorer' && <RefactorerView onRefactorStart={handleRefactorStart} addLog={addLog} />}
+          {view === 'illustrations' && activeBook && (
+            <IllustratorPanel
+              book={activeBook}
+              onGenerate={() => addLog('Illustrator', 'Cover generation requires image generation API.', 'warning')}
+              onEdit={() => {}}
+              isGenerating={isGenerating}
+              pendingPrompt={null}
+              onConfirm={() => {}}
+              onCancel={() => {}}
+            />
+          )}
+          {view === 'legal-audit' && activeBook && (
+            <LegalCounselView
+              book={activeBook}
+              onRunAudit={handleRunLegalAudit}
+              isGenerating={isGenerating}
+            />
+          )}
+          {view === 'marketing' && activeBook && (
+            <MarketingView
+              trailers={activeBook.trailers}
+              onGenerateTrailer={handleGenerateTrailer}
+              onSuggestPrompt={handleSuggestTrailerPrompt}
+              isGenerating={isGenerating}
+              onGenerateKit={handleGenerateLaunchKit}
+              launchKit={launchKit}
+            />
+          )}
         </main>
       </div>
       {activeBook && <VoiceCoach language={activeBook.metadata.language} />}
