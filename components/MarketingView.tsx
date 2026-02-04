@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
-import { VideoTrailer } from '../types';
+import { VideoTrailer, LaunchKit } from '../types';
+import LaunchKitView from './LaunchKitView';
 
 interface MarketingViewProps {
   trailers: VideoTrailer[];
@@ -8,9 +9,10 @@ interface MarketingViewProps {
   onSuggestPrompt: () => Promise<string>;
   isGenerating: boolean;
   onGenerateKit: () => void;
+  launchKit: LaunchKit | null;
 }
 
-const MarketingView: React.FC<MarketingViewProps> = ({ trailers, onGenerateTrailer, onSuggestPrompt, isGenerating, onGenerateKit }) => {
+const MarketingView: React.FC<MarketingViewProps> = ({ trailers, onGenerateTrailer, onSuggestPrompt, isGenerating, onGenerateKit, launchKit }) => {
   const [prompt, setPrompt] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
 
@@ -92,6 +94,12 @@ const MarketingView: React.FC<MarketingViewProps> = ({ trailers, onGenerateTrail
           </div>
         )}
       </div>
+
+      {launchKit && (
+        <div className="border-t border-white/10 pt-10">
+          <LaunchKitView kit={launchKit} />
+        </div>
+      )}
     </div>
   );
 };

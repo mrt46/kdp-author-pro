@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Book, ChapterStatus } from '../types';
 
 interface SidebarProps {
@@ -7,6 +7,8 @@ interface SidebarProps {
   activeChapterIndex: number;
   setActiveChapterIndex: (i: number) => void;
   onAddChapter: () => void;
+  onDeleteChapter: (index: number) => void;
+  onMoveChapter: (fromIndex: number, toIndex: number) => void;
 }
 
 const StatusIndicator = ({ status }: { status: ChapterStatus }) => {
@@ -25,7 +27,8 @@ const StatusIndicator = ({ status }: { status: ChapterStatus }) => {
   }
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ activeBook, activeChapterIndex, setActiveChapterIndex, onAddChapter }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeBook, activeChapterIndex, setActiveChapterIndex, onAddChapter, onDeleteChapter, onMoveChapter }) => {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   return (
     <aside className="w-72 bg-[#0f172a] border-r border-white/5 flex flex-col h-full shrink-0 overflow-hidden no-print">
       <div className="p-8 border-b border-white/5">
@@ -41,34 +44,68 @@ const Sidebar: React.FC<SidebarProps> = ({ activeBook, activeChapterIndex, setAc
 
       <div className="flex-1 overflow-y-auto p-6 space-y-3 custom-scroll">
         {activeBook.chapters.map((chapter, idx) => (
-          <button
+          <div
             key={chapter.id}
-            onClick={() => setActiveChapterIndex(idx)}
-            className={`w-full text-left p-5 rounded-[24px] border-2 transition-all group flex flex-col gap-2 relative ${
-              activeChapterIndex === idx 
-                ? 'bg-indigo-600 border-indigo-400 shadow-2xl shadow-indigo-600/30 scale-[1.02]' 
-                : 'bg-white/5 border-transparent hover:bg-white/[0.08]'
-            }`}
+            className="relative"
+            onMouseEnter={() => setHoveredIdx(idx)}
+            onMouseLeave={() => setHoveredIdx(null)}
           >
-            <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-black uppercase tracking-widest ${
-                activeChapterIndex === idx ? 'text-indigo-200' : 'text-slate-500'
+            <button
+              onClick={() => setActiveChapterIndex(idx)}
+              className={`w-full text-left p-5 rounded-[24px] border-2 transition-all group flex flex-col gap-2 ${
+                activeChapterIndex === idx
+                  ? 'bg-indigo-600 border-indigo-400 shadow-2xl shadow-indigo-600/30 scale-[1.02]'
+                  : 'bg-white/5 border-transparent hover:bg-white/[0.08]'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className={`text-[10px] font-black uppercase tracking-widest ${
+                  activeChapterIndex === idx ? 'text-indigo-200' : 'text-slate-500'
+                }`}>
+                  Chapter {idx + 1}
+                </span>
+                <StatusIndicator status={chapter.status} />
+              </div>
+              <p className={`text-xs font-black leading-tight line-clamp-2 ${
+                activeChapterIndex === idx ? 'text-white' : 'text-slate-200'
               }`}>
-                Chapter {idx + 1}
-              </span>
-              <StatusIndicator status={chapter.status} />
-            </div>
-            <p className={`text-xs font-black leading-tight line-clamp-2 ${
-              activeChapterIndex === idx ? 'text-white' : 'text-slate-200'
-            }`}>
-              {chapter.title || 'Drafting Title...'}
-            </p>
-            
-            {/* Red status dot indicated in screenshot - using for status error/unfinished */}
-            {(chapter.status === 'error' || chapter.status === 'empty') && (
-               <div className="absolute top-4 right-4 w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
+                {chapter.title || 'Drafting Title...'}
+              </p>
+            </button>
+
+            {hoveredIdx === idx && (
+              <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
+                {idx > 0 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMoveChapter(idx, idx - 1); }}
+                    className="w-6 h-6 rounded-lg bg-black/60 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition-all backdrop-blur-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                  </button>
+                )}
+                {idx < activeBook.chapters.length - 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onMoveChapter(idx, idx + 1); }}
+                    className="w-6 h-6 rounded-lg bg-black/60 hover:bg-indigo-600 text-slate-300 hover:text-white flex items-center justify-center transition-all backdrop-blur-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                  </button>
+                )}
+                {activeBook.chapters.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onDeleteChapter(idx); }}
+                    className="w-6 h-6 rounded-lg bg-black/60 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition-all backdrop-blur-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                  </button>
+                )}
+              </div>
             )}
-          </button>
+
+            {(chapter.status === 'error' || chapter.status === 'empty') && hoveredIdx !== idx && (
+               <div className="absolute top-4 right-4 w-1.5 h-1.5 bg-rose-500 rounded-full pointer-events-none"></div>
+            )}
+          </div>
         ))}
       </div>
 

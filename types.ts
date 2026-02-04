@@ -85,7 +85,7 @@ export interface Book {
   trailers: VideoTrailer[];
   loreBible: LoreEntry[];
   audits: any[];
-  legalAudits: any[];
+  legalAudits: LegalAudit[];
   createdAt: number;
   updatedAt: number;
 }
@@ -132,4 +132,11 @@ export interface ExportSettings {
 export interface DetectedChapter {
   title: string;
   content: string;
+}
+
+export interface LegalAudit {
+  id: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  findings: string;
+  timestamp: number;
 }

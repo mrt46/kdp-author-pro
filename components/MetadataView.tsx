@@ -75,7 +75,18 @@ const MetadataView: React.FC<MetadataViewProps> = ({ metadata, chapters, modelAs
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {(form.strategy?.backendKeywords || ["", "", "", "", "", "", ""]).map((kw, i) => (
-                  <input key={i} type="text" readOnly value={kw} placeholder={`Kutu ${i+1}`} className="bg-slate-50 px-4 py-2 rounded-xl text-xs border border-slate-100 text-slate-600" />
+                  <input
+                    key={i}
+                    type="text"
+                    value={kw}
+                    onChange={(e) => {
+                      const updated = [...(form.strategy?.backendKeywords || ["", "", "", "", "", "", ""])];
+                      updated[i] = e.target.value;
+                      setForm({ ...form, strategy: { ...form.strategy!, backendKeywords: updated } });
+                    }}
+                    placeholder={`Kutu ${i+1}`}
+                    className="bg-slate-50 px-4 py-2 rounded-xl text-xs border border-slate-100 text-slate-600 focus:border-indigo-400 outline-none"
+                  />
                 ))}
               </div>
 
