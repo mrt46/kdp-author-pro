@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import { BookMetadata, Chapter, ProjectStrategy, LoreEntry, DetectedChapter } from "../types";
+import { BookMetadata, Chapter, ProjectStrategy, LoreEntry, DetectedChapter, LaunchKit } from "../types";
 
 export interface MarketSuggestion {
   title: string;
@@ -295,7 +295,7 @@ export const geminiService = {
     return ai.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       callbacks,
-      config: { 
+      config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
@@ -303,5 +303,57 @@ export const geminiService = {
         systemInstruction: `You are a friendly writing coach helping a writer in ${language}.`,
       }
     });
+  },
+
+  async generateSEOKeywords(title: string, description: string, language: string): Promise<{ backendKeywords: string[]; competitorGaps: string[] }> {
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        backendKeywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+        competitorGaps: { type: Type.ARRAY, items: { type: Type.STRING } }
+      },
+      required: ["backendKeywords", "competitorGaps"]
+    };
+    const prompt = `You are an Amazon KDP SEO expert. Generate exactly 7 high-value backend keywords for the following book.\n\nTitle: "${title}"\nDescription: "${description}"\nLanguage: ${language}\n\nReturn 7 backend keywords in the "backendKeywords" array and 3 competitor gap opportunities in "competitorGaps".`;
+    return callAI("gemini-3-flash-preview", "Amazon KDP SEO Specialist", prompt, true, schema);
+  },
+
+  async runLegalAudit(fullContent: string, title: string): Promise<{ riskLevel: 'low' | 'medium' | 'high'; findings: string }> {
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        riskLevel: { type: Type.STRING, enum: ["low", "medium", "high"] },
+        findings: { type: Type.STRING }
+      },
+      required: ["riskLevel", "findings"]
+    };
+    const prompt = `You are a legal compliance advisor specializing in Amazon KDP publishing. Analyze the following manuscript for:\n1. Potential trademark or copyright violations (generic terms vs registered marks)\n2. KDP Content Policy violations (hate speech, violence, sexual content guidelines)\n3. Factual accuracy risks that could lead to legal liability\n4. Any brand name misuse\n\nTitle: "${title}"\nManuscript excerpt (first 8000 chars): "${fullContent.slice(0, 8000)}"\n\nProvide a risk level (low/medium/high) and detailed findings with specific recommendations.`;
+    return callAI("gemini-3-pro-preview", "KDP Legal Compliance Agent", prompt, true, schema);
+  },
+
+  async suggestTrailerPrompt(title: string, description: string): Promise<string> {
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        prompt: { type: Type.STRING }
+      },
+      required: ["prompt"]
+    };
+    const res = await callAI<{ prompt: string }>("gemini-3-flash-preview", "Cinematic Trailer Director", `Create a vivid, atmospheric cinematic trailer prompt for the book:\nTitle: "${title}"\nDescription: "${description}"\n\nThe prompt should describe a 5-10 second cinematic scene that captures the essence of the book. Include lighting, mood, camera angle, and visual details.`, true, schema);
+    return res.prompt;
+  },
+
+  async generateLaunchKit(title: string, description: string, language: string): Promise<LaunchKit> {
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        instagram: { type: Type.ARRAY, items: { type: Type.STRING } },
+        twitter: { type: Type.ARRAY, items: { type: Type.STRING } },
+        email: { type: Type.STRING }
+      },
+      required: ["instagram", "twitter", "email"]
+    };
+    const prompt = `You are a social media marketing expert for book launches. Create a launch kit for the following book in ${language}:\n\nTitle: "${title}"\nDescription: "${description}"\n\nGenerate:\n- 3 Instagram post captions (with relevant hashtags)\n- 3 Twitter/X thread starter posts\n- 1 launch email template\n\nMake the content engaging, platform-appropriate, and focused on driving book sales on Amazon KDP.`;
+    return callAI("gemini-3-flash-preview", "Book Launch Marketing Agent", prompt, true, schema);
   }
 };
