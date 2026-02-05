@@ -1,6 +1,42 @@
 
 export type ChapterStatus = 'empty' | 'writing' | 'auditing' | 'completed' | 'error' | 'revising';
 
+// AI Orchestrator Types
+export type AIProvider = 'google' | 'openai' | 'anthropic' | 'deepseek' | 'meta' | 'fal-ai' | 'replicate';
+
+export interface ModelConfig {
+  id: string;
+  provider: AIProvider;
+  tier: 'economy' | 'standard' | 'premium';
+  inputCostPer1M: number;
+  outputCostPer1M: number;
+  contextWindow: number;
+  maxOutputTokens: number;
+  capabilities: ('text' | 'json' | 'image' | 'audio' | 'reasoning')[];
+}
+
+export interface AIUsageMetrics {
+  promptTokens: number;
+  completionTokens: number;
+  totalCost: number;
+  modelId: string;
+  provider: AIProvider;
+  timestamp: number;
+}
+
+export interface UnifiedAIResponse<T> {
+  content: T;
+  usage: AIUsageMetrics;
+}
+
+export interface AIError {
+  provider: AIProvider;
+  code: string;
+  message: string;
+  isRetryable: boolean;
+  retryAfter?: number;
+}
+
 export interface LoreEntry {
   id: string;
   name: string;

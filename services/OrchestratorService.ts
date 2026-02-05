@@ -53,6 +53,10 @@ class OrchestratorService {
     this.currentAssignments = assignments;
   }
 
+  public getApiKey(provider: AIProvider): string | undefined {
+    return this.apiKeys[provider];
+  }
+
   private hasKey(provider: AIProvider): boolean {
     return !!this.apiKeys[provider];
   }
