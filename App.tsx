@@ -270,6 +270,7 @@ const App: React.FC = () => {
       };
       
       setBooks(prev => [...prev, newBook]);
+      booksRef.current = [...booksRef.current, newBook];
       setActiveBookId(bookId);
 
       for (let i = 0; i < newBook.chapters.length; i++) {
@@ -356,8 +357,9 @@ const App: React.FC = () => {
     };
 
     setBooks(prev => [...prev, newBook]);
+    booksRef.current = [...booksRef.current, newBook];
     setActiveBookId(newBookId);
-    
+
     setIsGenerating(true);
     setView('orchestrator');
 
