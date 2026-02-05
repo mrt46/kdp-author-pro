@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { BookMetadata, Chapter, ProjectStrategy, LoreEntry, DetectedChapter, LaunchKit } from "../types";
+import { orchestratorService } from "./OrchestratorService";
 
 export interface MarketSuggestion {
   title: string;
@@ -49,32 +50,19 @@ const AGENT_PROMPTS = {
 };
 
 async function callAI<T>(model: string, systemInstruction: string, userPrompt: string, isJson = true, schema?: any, maxOutputTokens?: number, thinkingBudget?: number): Promise<T> {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-  const config: any = { systemInstruction, temperature: 0.7 };
-  if (isJson) {
-    config.responseMimeType = "application/json";
-    if (schema) config.responseSchema = schema;
-  }
-  if (maxOutputTokens) {
-    config.maxOutputTokens = maxOutputTokens;
-  }
-  if (thinkingBudget !== undefined) {
-    config.thinkingConfig = { thinkingBudget };
-  }
-
-
+  // Artık orchestratorService üzerinden çağrı yapıyoruz
   try {
-    const response = await ai.models.generateContent({
-      model,
-      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      config,
-    });
-    const text = response.text || "";
-    if (isJson) {
-      const jsonContent = text.includes("```json") ? text.split("```json")[1].split("```")[0].trim() : text.trim();
-      return JSON.parse(jsonContent);
-    }
-    return text as unknown as T;
+    const response = await orchestratorService.request<T>(
+      'WRITING', // Default task type, tüm gemini çağrıları için
+      userPrompt,
+      {
+        modelId: model,
+        systemInstruction,
+        isJson,
+        schema
+      }
+    );
+    return response.content;
   } catch (error) {
     console.error(`AI Call Failed [${model}]:`, error);
     throw error;
@@ -91,13 +79,13 @@ export const geminiService = {
         relevantIds: { type: Type.ARRAY, items: { type: Type.STRING } }
       }
     };
-    const res = await callAI<{relevantIds: string[]}>("gemini-3-flash-preview", AGENT_PROMPTS.VECTOR_RETRIEVER, `Chapter Goal: ${chapterGoal}\n\nAvailable Lore Bible: ${JSON.stringify(fullLore)}`, true, schema);
+    const res = await callAI<{relevantIds: string[]}>("gemini-2.5-flash", AGENT_PROMPTS.VECTOR_RETRIEVER, `Chapter Goal: ${chapterGoal}\n\nAvailable Lore Bible: ${JSON.stringify(fullLore)}`, true, schema);
     return fullLore.filter(l => res.relevantIds.includes(l.id));
   },
 
   async writeChapter(chapter: Partial<Chapter>, metadata: BookMetadata, activeLore: LoreEntry[], fixInstruction?: string): Promise<string> {
     const userPrompt = `Write Chapter: "${chapter.title}". Goal: ${chapter.description}.`;
-    return callAI("gemini-3-flash-preview", AGENT_PROMPTS.WRITER(metadata.tone || "Creative", metadata.language, activeLore, fixInstruction), userPrompt, false);
+    return callAI("gemini-2.5-flash", AGENT_PROMPTS.WRITER(metadata.tone || "Creative", metadata.language, activeLore, fixInstruction), userPrompt, false);
   },
 
   // New method for refactoring chapters
@@ -132,7 +120,7 @@ export const geminiService = {
 
     const baseInputTokens = Math.ceil(chapterContent.length / 4); // Very rough token estimate
     // Allocate maxOutputTokens considering expansion factor and a buffer
-    // For gemini-3-flash-preview, a safe thinking budget is 500-1000 tokens
+    // For gemini-2.5-flash, a safe thinking budget is 500-1000 tokens
     const thinkingBudget = 750; 
     // Increased buffer for maxOutputTokens to ensure enough room for expansion
     const maxOutputTokens = Math.ceil(baseInputTokens * expansionFactor * 2) + thinkingBudget + 1000; // 2x buffer + 1000 for safety
@@ -140,7 +128,7 @@ export const geminiService = {
 
     const userPrompt = `Original Content for Revision: """\n${chapterContent}\n"""`;
     
-    return callAI("gemini-3-flash-preview", systemInstruction, userPrompt, false, undefined, maxOutputTokens, thinkingBudget);
+    return callAI("gemini-2.5-flash", systemInstruction, userPrompt, false, undefined, maxOutputTokens, thinkingBudget);
   },
 
   async auditChapter(content: string, activeLore: LoreEntry[]): Promise<{ isPass: boolean; score: number; feedback: string }> {
@@ -154,7 +142,7 @@ export const geminiService = {
       required: ["isPass", "score", "feedback"]
     };
     const prompt = `Text: ${content.slice(0, 10000)}\n\nActive Lore to Check Against: ${JSON.stringify(activeLore)}`;
-    return callAI("gemini-3-pro-preview", AGENT_PROMPTS.AUDITOR, prompt, true, schema);
+    return callAI("gemini-2.5-flash", AGENT_PROMPTS.AUDITOR, prompt, true, schema);
   },
 
   async extractLore(content: string): Promise<LoreEntry[]> {
@@ -173,7 +161,7 @@ export const geminiService = {
         required: ["name", "category", "description"]
       }
     };
-    return callAI("gemini-3-flash-preview", AGENT_PROMPTS.WORLD_ARCHITECT, content.slice(0, 10000), true, schema);
+    return callAI("gemini-2.5-flash", AGENT_PROMPTS.WORLD_ARCHITECT, content.slice(0, 10000), true, schema);
   },
 
   async generateOutline(title: string, strategy: ProjectStrategy, language: string, length: string): Promise<Partial<Chapter>[]> {
@@ -187,7 +175,7 @@ export const geminiService = {
         }
       }
     };
-    return callAI("gemini-3-pro-preview", AGENT_PROMPTS.DIRECTOR, `Outline "${title}" in ${language}.`, true, schema);
+    return callAI("gemini-2.5-flash", AGENT_PROMPTS.DIRECTOR, `Outline "${title}" in ${language}.`, true, schema);
   },
 
   async performMarketAnalysis(niche: string, language: string): Promise<ProjectStrategy> {
@@ -200,14 +188,14 @@ export const geminiService = {
         pricingStrategy: { type: Type.OBJECT, properties: { suggestedPrice: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } }
       }
     };
-    return callAI("gemini-3-pro-preview", "SEO Expert", `KDP niche: ${niche}`, true, schema);
+    return callAI("gemini-2.5-flash", "SEO Expert", `KDP niche: ${niche}`, true, schema);
   },
 
   async diagnose(error: string, feedback: string): Promise<string> {
     const schema = {
       type: Type.OBJECT, properties: { fixInstruction: { type: Type.STRING } }
     };
-    const res = await callAI<{fixInstruction: string}>("gemini-3-flash-preview", AGENT_PROMPTS.SYSTEM_ANALYST, `Reason for failure: "${error}". Detailed feedback from auditor: "${feedback}". Based on this, provide a concise, actionable, and specific instruction for the writing agent to correct the content and pass the audit. Focus on *how* to fix it.`, true, schema);
+    const res = await callAI<{fixInstruction: string}>("gemini-2.5-flash", AGENT_PROMPTS.SYSTEM_ANALYST, `Reason for failure: "${error}". Detailed feedback from auditor: "${feedback}". Based on this, provide a concise, actionable, and specific instruction for the writing agent to correct the content and pass the audit. Focus on *how* to fix it.`, true, schema);
     return res.fixInstruction;
   },
 
@@ -229,7 +217,7 @@ export const geminiService = {
         required: ["title", "niche", "profitabilityScore"]
       }
     };
-    return callAI<MarketSuggestion[]>("gemini-3-pro-preview", "Market Researcher", `Trending KDP niches for ${language}`, true, schema);
+    return callAI<MarketSuggestion[]>("gemini-2.5-flash", "Market Researcher", `Trending KDP niches for ${language}`, true, schema);
   },
 
   // Method to analyze an imported book for refactoring
@@ -270,15 +258,18 @@ export const geminiService = {
     };
     // Prompt'u güncelleyerek AI'dan bölüm tespiti istendi
     const prompt = `Analyze this book in ${language}. Provide a title, summary, detected niche, current tone, and an estimation of how many chapters it contains. Crucially, also attempt to identify the existing chapter divisions within the text. For each detected chapter, extract its estimated title and its full content. If no clear chapter divisions are found, return the entire content as a single detected chapter. Only detect chapters if they are clearly delimited by headings like "Chapter X", "Bölüm Y", or distinct section titles, or by significant structural breaks (e.g., several blank lines followed by a new section title). Respond in JSON based on the provided schema.\n\nBook Content: ${content.slice(0, 5000)}`;
-    return callAI<RefactorAnalysis>("gemini-3-pro-preview", "Senior Book Analyst", prompt, true, schema);
+    return callAI<RefactorAnalysis>("gemini-2.5-flash", "Senior Book Analyst", prompt, true, schema);
   },
 
   async generateAudio(text: string): Promise<string | undefined> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = orchestratorService.getApiKey('google');
+    if (!apiKey) throw new Error("Google API Key is not configured.");
+
+    const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-preview-tts",
       contents: [{ parts: [{ text }] }],
-      config: { 
+      config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
@@ -291,7 +282,10 @@ export const geminiService = {
   },
 
   async connectVoiceCoach(callbacks: any, language: string): Promise<any> {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = orchestratorService.getApiKey('google');
+    if (!apiKey) throw new Error("Google API Key is not configured.");
+
+    const ai = new GoogleGenAI({ apiKey });
     return ai.live.connect({
       model: 'gemini-2.5-flash-native-audio-preview-12-2025',
       callbacks,
@@ -315,7 +309,7 @@ export const geminiService = {
       required: ["backendKeywords", "competitorGaps"]
     };
     const prompt = `You are an Amazon KDP SEO expert. Generate exactly 7 high-value backend keywords for the following book.\n\nTitle: "${title}"\nDescription: "${description}"\nLanguage: ${language}\n\nReturn 7 backend keywords in the "backendKeywords" array and 3 competitor gap opportunities in "competitorGaps".`;
-    return callAI("gemini-3-flash-preview", "Amazon KDP SEO Specialist", prompt, true, schema);
+    return callAI("gemini-2.5-flash", "Amazon KDP SEO Specialist", prompt, true, schema);
   },
 
   async runLegalAudit(fullContent: string, title: string): Promise<{ riskLevel: 'low' | 'medium' | 'high'; findings: string }> {
@@ -328,7 +322,7 @@ export const geminiService = {
       required: ["riskLevel", "findings"]
     };
     const prompt = `You are a legal compliance advisor specializing in Amazon KDP publishing. Analyze the following manuscript for:\n1. Potential trademark or copyright violations (generic terms vs registered marks)\n2. KDP Content Policy violations (hate speech, violence, sexual content guidelines)\n3. Factual accuracy risks that could lead to legal liability\n4. Any brand name misuse\n\nTitle: "${title}"\nManuscript excerpt (first 8000 chars): "${fullContent.slice(0, 8000)}"\n\nProvide a risk level (low/medium/high) and detailed findings with specific recommendations.`;
-    return callAI("gemini-3-pro-preview", "KDP Legal Compliance Agent", prompt, true, schema);
+    return callAI("gemini-2.5-flash", "KDP Legal Compliance Agent", prompt, true, schema);
   },
 
   async suggestTrailerPrompt(title: string, description: string): Promise<string> {
@@ -339,7 +333,7 @@ export const geminiService = {
       },
       required: ["prompt"]
     };
-    const res = await callAI<{ prompt: string }>("gemini-3-flash-preview", "Cinematic Trailer Director", `Create a vivid, atmospheric cinematic trailer prompt for the book:\nTitle: "${title}"\nDescription: "${description}"\n\nThe prompt should describe a 5-10 second cinematic scene that captures the essence of the book. Include lighting, mood, camera angle, and visual details.`, true, schema);
+    const res = await callAI<{ prompt: string }>("gemini-2.5-flash", "Cinematic Trailer Director", `Create a vivid, atmospheric cinematic trailer prompt for the book:\nTitle: "${title}"\nDescription: "${description}"\n\nThe prompt should describe a 5-10 second cinematic scene that captures the essence of the book. Include lighting, mood, camera angle, and visual details.`, true, schema);
     return res.prompt;
   },
 
@@ -354,6 +348,6 @@ export const geminiService = {
       required: ["instagram", "twitter", "email"]
     };
     const prompt = `You are a social media marketing expert for book launches. Create a launch kit for the following book in ${language}:\n\nTitle: "${title}"\nDescription: "${description}"\n\nGenerate:\n- 3 Instagram post captions (with relevant hashtags)\n- 3 Twitter/X thread starter posts\n- 1 launch email template\n\nMake the content engaging, platform-appropriate, and focused on driving book sales on Amazon KDP.`;
-    return callAI("gemini-3-flash-preview", "Book Launch Marketing Agent", prompt, true, schema);
+    return callAI("gemini-2.5-flash", "Book Launch Marketing Agent", prompt, true, schema);
   }
 };
