@@ -471,6 +471,39 @@ const App: React.FC = () => {
     }
   };
 
+  // --- Illustrations ---
+  const handleGenerateIllustration = async () => {
+    if (!activeBook) return;
+    setIsGenerating(true);
+    addLog('Illustrator', 'Generating KDP cover concept using Flux 1.1 Pro...', 'info');
+    
+    try {
+      // Prompt oluşturma (Normalde AI ajanı yapmalı, şimdilik basit bir şablon)
+      const prompt = `Professional book cover for "${activeBook.metadata.title}". ${activeBook.metadata.description.slice(0, 100)}. Genre: ${activeBook.metadata.strategy?.niche || 'Non-fiction'}. High resolution, cinematic lighting, 8k, typography integration space.`;
+      
+      const imageUrl = await orchestratorService.generateImage(prompt);
+      
+      const newIllustration = {
+        id: crypto.randomUUID(),
+        url: imageUrl,
+        prompt: prompt,
+        type: 'cover' as const,
+        createdAt: Date.now()
+      };
+
+      updateBook(activeBook.id, b => ({
+        ...b,
+        illustrations: [newIllustration, ...b.illustrations]
+      }));
+      
+      addLog('Illustrator', 'Cover concept generated successfully.', 'success');
+    } catch (e: any) {
+      addLog('Illustrator', `Generation failed: ${e.message}`, 'critical');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // --- Marketing: Trailer & Launch Kit ---
   const handleSuggestTrailerPrompt = async (): Promise<string> => {
     if (!activeBook) return '';
@@ -584,7 +617,7 @@ const App: React.FC = () => {
           {view === 'illustrations' && activeBook && (
             <IllustratorPanel
               book={activeBook}
-              onGenerate={() => addLog('Illustrator', 'Cover generation requires image generation API.', 'warning')}
+              onGenerate={handleGenerateIllustration}
               onEdit={() => {}}
               isGenerating={isGenerating}
               pendingPrompt={null}
