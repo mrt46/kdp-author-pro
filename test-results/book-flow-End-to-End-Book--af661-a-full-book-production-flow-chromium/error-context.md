@@ -1,0 +1,75 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e6] [cursor=pointer]:
+      - generic [ref=e7]: K
+      - generic [ref=e8]:
+        - heading "KDP PRO STUDIO" [level=1] [ref=e9]
+        - generic [ref=e11]: AI for Authors
+    - navigation [ref=e12]:
+      - button "Studio" [ref=e13] [cursor=pointer]
+      - button "Writing" [ref=e14] [cursor=pointer]
+      - button "War Room" [ref=e15] [cursor=pointer]
+      - button "World" [ref=e16] [cursor=pointer]
+      - button "Visuals" [ref=e17] [cursor=pointer]
+      - button "Legal" [ref=e18] [cursor=pointer]
+      - button "Launch" [ref=e19] [cursor=pointer]
+    - generic [ref=e20]:
+      - generic [ref=e21]: Synced
+      - button "Export" [ref=e23] [cursor=pointer]
+  - generic [ref=e24]:
+    - complementary [ref=e25]:
+      - generic [ref=e26]:
+        - heading "Manuscript Chapters" [level=3] [ref=e27]
+        - button "Add Chapter" [ref=e28] [cursor=pointer]:
+          - img [ref=e29]
+          - text: Add Chapter
+      - button "Chapter 1 Introduction to AI" [ref=e32] [cursor=pointer]:
+        - generic [ref=e34]: Chapter 1
+        - paragraph [ref=e36]: Introduction to AI
+      - generic [ref=e38]:
+        - img [ref=e40]
+        - paragraph [ref=e43]: Global Progress
+    - main [ref=e45]:
+      - generic [ref=e46]:
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - generic [ref=e49]:
+              - heading "Introduction to AI" [level=2] [ref=e50]
+              - generic [ref=e51]:
+                - generic [ref=e52]: error
+                - generic [ref=e53]: 0 Words
+            - button "TTS" [disabled] [ref=e54]:
+              - img [ref=e55]
+              - text: TTS
+            - button "Zen Mode" [ref=e57] [cursor=pointer]
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - textbox "Micro-revise manuscript..." [ref=e60]
+              - button "Refine" [disabled] [ref=e61]
+            - button "Autopilot Write" [ref=e62] [cursor=pointer]
+        - generic [ref=e63]:
+          - textbox "Start your masterpiece..." [ref=e66]
+          - generic [ref=e67]:
+            - generic [ref=e68]:
+              - heading "Agent Intelligence" [level=3] [ref=e69]
+              - button [ref=e70] [cursor=pointer]:
+                - img [ref=e71]
+            - generic [ref=e85]:
+              - paragraph [ref=e87]: Live Agent Briefing
+              - generic [ref=e88]:
+                - generic [ref=e89]:
+                  - generic [ref=e90]:
+                    - generic [ref=e91]: SEO Analyst
+                    - generic [ref=e92]: 17:29
+                  - paragraph [ref=e93]: Strategic blueprint and agent instruction set created.
+                - generic [ref=e94]:
+                  - generic [ref=e95]:
+                    - generic [ref=e96]: Director
+                    - generic [ref=e97]: 17:29
+                  - paragraph [ref=e98]: "Preparing autonomous mission order for custom title: \"AI for Authors\"..."
+  - button [ref=e100] [cursor=pointer]:
+    - img [ref=e101]
+```
