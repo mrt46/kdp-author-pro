@@ -125,11 +125,20 @@ class OrchestratorService {
   public async request<T>(
     taskType: keyof typeof DEFAULT_ASSIGNMENTS,
     prompt: string,
-    options: { modelId?: string; systemInstruction?: string; isJson?: boolean; schema?: any } = {},
+    options: {
+      modelId?: string;
+      systemInstruction?: string;
+      isJson?: boolean;
+      schema?: any;
+      bookId?: string;
+      chapterId?: string;
+      agent?: string;
+    } = {},
     retryCount = 0
   ): Promise<UnifiedAIResponse<T>> {
+    const startTime = Date.now();
     const model = this.resolveModel(options.modelId || DEFAULT_ASSIGNMENTS[taskType], taskType);
-    
+
     try {
       let response: UnifiedAIResponse<T>;
 
@@ -152,6 +161,12 @@ class OrchestratorService {
         default:
           throw new Error(`Provider ${model.provider} not yet fully implemented in Orchestrator.`);
       }
+
+      // Add enhanced tracking data
+      response.usage.bookId = options.bookId;
+      response.usage.chapterId = options.chapterId;
+      response.usage.agent = options.agent;
+      response.usage.duration = Date.now() - startTime;
 
       this.trackUsage(response.usage);
       return response;
@@ -450,6 +465,84 @@ class OrchestratorService {
       history: this.usageHistory
     };
   }
+
+  /**
+   * Enhanced analytics for cost dashboard
+   */
+  public getDetailedAnalytics(bookId?: string) {
+    const filtered = bookId
+      ? this.usageHistory.filter(u => u.bookId === bookId)
+      : this.usageHistory;
+
+    const totalCost = filtered.reduce((sum, u) => sum + u.totalCost, 0);
+
+    // By Agent
+    const byAgent: Record<string, { cost: number; count: number }> = {};
+    filtered.forEach(u => {
+      const agent = u.agent || 'Unknown';
+      if (!byAgent[agent]) byAgent[agent] = { cost: 0, count: 0 };
+      byAgent[agent].cost += u.totalCost;
+      byAgent[agent].count++;
+    });
+
+    // By Model
+    const byModel: Record<string, { cost: number; count: number }> = {};
+    filtered.forEach(u => {
+      if (!byModel[u.modelId]) byModel[u.modelId] = { cost: 0, count: 0 };
+      byModel[u.modelId].cost += u.totalCost;
+      byModel[u.modelId].count++;
+    });
+
+    // By Provider
+    const byProvider: Record<string, { cost: number; count: number }> = {};
+    filtered.forEach(u => {
+      if (!byProvider[u.provider]) byProvider[u.provider] = { cost: 0, count: 0 };
+      byProvider[u.provider].cost += u.totalCost;
+      byProvider[u.provider].count++;
+    });
+
+    // By Chapter (bottleneck analysis)
+    const byChapter: Record<string, { cost: number; count: number; avgDuration: number }> = {};
+    filtered.forEach(u => {
+      if (!u.chapterId) return;
+      if (!byChapter[u.chapterId]) byChapter[u.chapterId] = { cost: 0, count: 0, avgDuration: 0 };
+      byChapter[u.chapterId].cost += u.totalCost;
+      byChapter[u.chapterId].count++;
+      if (u.duration) byChapter[u.chapterId].avgDuration += u.duration;
+    });
+
+    // Calculate avg durations
+    Object.keys(byChapter).forEach(chId => {
+      if (byChapter[chId].count > 0) {
+        byChapter[chId].avgDuration /= byChapter[chId].count;
+      }
+    });
+
+    // Find bottlenecks (chapters with high retry counts or long durations)
+    const bottlenecks = Object.entries(byChapter)
+      .filter(([_, data]) => data.count > 3 || data.avgDuration > 30000) // >3 retries or >30s
+      .map(([chapterId, data]) => ({ chapterId, ...data }))
+      .sort((a, b) => b.cost - a.cost);
+
+    return {
+      totalCost,
+      count: filtered.length,
+      byAgent,
+      byModel,
+      byProvider,
+      byChapter,
+      bottlenecks,
+      history: filtered
+    };
+  }
+
+  /**
+   * Get cost breakdown for a specific book
+   */
+  public getBookCostBreakdown(bookId: string) {
+    return this.getDetailedAnalytics(bookId);
+  }
 }
+
 
 export const orchestratorService = new OrchestratorService();
