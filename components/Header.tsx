@@ -45,31 +45,46 @@ const Header: React.FC<HeaderProps> = ({ view, setView, bookTitle, hasBook, onEx
         )}
       </div>
 
-      {hasBook && (
-        <nav className="flex items-center gap-2 bg-black/30 p-1.5 rounded-2xl border border-white/5">
-          {[
-            { id: 'dashboard', label: 'Studio' },
-            { id: 'editor', label: 'Writing' },
-            { id: 'orchestrator', label: 'War Room' },
-            { id: 'lore-bible', label: 'World' },
-            { id: 'illustrations', label: 'Visuals' },
-            { id: 'legal-audit', label: 'Legal' },
-            { id: 'marketing', label: 'Launch' }
-          ].map((item) => (
-            <button 
-              key={item.id}
-              onClick={() => setView(item.id as AppState)} 
-              className={`px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${
-                view === item.id 
-                  ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 scale-105' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      )}
+      <nav className="flex items-center gap-2 bg-black/30 p-1.5 rounded-2xl border border-white/5">
+        <button
+          onClick={() => setView('book-library')}
+          className={`px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${
+            view === 'book-library'
+              ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 scale-105'
+              : 'text-slate-400 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          Library
+        </button>
+        {hasBook && (
+          <>
+            {[
+              { id: 'dashboard', label: 'Studio' },
+              { id: 'editor', label: 'Writing' },
+              { id: 'review-dashboard', label: 'Review' },
+              { id: 'orchestrator', label: 'War Room' },
+              { id: 'lore-bible', label: 'World' },
+              { id: 'illustrations', label: 'Visuals' },
+              { id: 'legal-audit', label: 'Legal' },
+              { id: 'originality-check', label: 'Originality' },
+              { id: 'cost-dashboard', label: 'Costs' },
+              { id: 'marketing', label: 'Launch' }
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id as AppState)}
+                className={`px-5 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all duration-300 ${
+                  view === item.id
+                    ? 'bg-indigo-600 text-white shadow-xl shadow-indigo-600/30 scale-105'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </>
+        )}
+      </nav>
 
       <div className="flex items-center gap-4">
         {hasBook && saveStatus && (
