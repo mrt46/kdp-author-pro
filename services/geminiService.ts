@@ -27,8 +27,9 @@ export interface RefactorAnalysis {
 const AGENT_PROMPTS = {
   DIRECTOR: `You are the KDP Production Director. Design professional book architecture.`,
   VECTOR_RETRIEVER: `You are a Semantic Search Engine. Given a chapter goal and a list of Lore, identify the 5 most relevant entries.`,
-  WRITER: (tone: string, language: string, activeLore: LoreEntry[], fixInstruction?: string) => `You are an elite KDP Author. 
-  Language: ${language}. Tone: ${tone}. 
+  WRITER: (tone: string, language: string, targetWordCount: number, activeLore: LoreEntry[], fixInstruction?: string) => `You are an elite KDP Author.
+  Language: ${language}. Tone: ${tone}.
+  TARGET: Write approximately ${targetWordCount} words for this chapter. Aim for quality depth while hitting this target (±10-15% variance is acceptable).
   ACTIVE MEMORY (Vector Retrieved): ${JSON.stringify(activeLore)}.
   Write FULL prose. Maintain strict consistency with the active memory.
   ${fixInstruction ? `CRITICAL REVISION DIRECTIVE: Your previous attempt failed. Address the following issues explicitly and without deviation: "${fixInstruction}". Ensure all previous errors are resolved.` : ""}
@@ -49,14 +50,22 @@ const AGENT_PROMPTS = {
   Ensure the revised output is a coherent, flowing prose in markdown format, suitable for a book chapter. Do not include any conversational filler.`
 };
 
-async function callAI<T>(model: string, systemInstruction: string, userPrompt: string, isJson = true, schema?: any, maxOutputTokens?: number, thinkingBudget?: number): Promise<T> {
-  // Artık orchestratorService üzerinden çağrı yapıyoruz
+async function callAI<T>(
+  taskType: 'WRITING' | 'AUDIT' | 'OUTLINE',
+  systemInstruction: string,
+  userPrompt: string,
+  isJson = true,
+  schema?: any,
+  maxOutputTokens?: number,
+  thinkingBudget?: number
+): Promise<T> {
+  // Orchestrator'a model ID vermiyoruz - profil bazlı seçim yapacak
+  // Creative → Claude, Reasoning → DeepSeek, Turbo → Gemini Flash
   try {
     const response = await orchestratorService.request<T>(
-      'WRITING', // Default task type, tüm gemini çağrıları için
+      taskType,
       userPrompt,
       {
-        modelId: model,
         systemInstruction,
         isJson,
         schema
@@ -64,7 +73,7 @@ async function callAI<T>(model: string, systemInstruction: string, userPrompt: s
     );
     return response.content;
   } catch (error) {
-    console.error(`AI çağrısı başarısız [${model}]:`, error);
+    console.error(`AI çağrısı başarısız [${taskType}]:`, error);
     throw error;
   }
 }
@@ -79,13 +88,19 @@ export const geminiService = {
         relevantIds: { type: Type.ARRAY, items: { type: Type.STRING } }
       }
     };
-    const res = await callAI<{relevantIds: string[]}>("gemini-2.5-flash", AGENT_PROMPTS.VECTOR_RETRIEVER, `Chapter Goal: ${chapterGoal}\n\nAvailable Lore Bible: ${JSON.stringify(fullLore)}`, true, schema);
+    const res = await callAI<{relevantIds: string[]}>("OUTLINE", AGENT_PROMPTS.VECTOR_RETRIEVER, `Chapter Goal: ${chapterGoal}\n\nAvailable Lore Bible: ${JSON.stringify(fullLore)}`, true, schema);
     return fullLore.filter(l => res.relevantIds.includes(l.id));
   },
 
-  async writeChapter(chapter: Partial<Chapter>, metadata: BookMetadata, activeLore: LoreEntry[], fixInstruction?: string): Promise<string> {
+  async writeChapter(
+    chapter: Partial<Chapter>,
+    metadata: BookMetadata,
+    activeLore: LoreEntry[],
+    targetWordCount: number,
+    fixInstruction?: string
+  ): Promise<string> {
     const userPrompt = `Write Chapter: "${chapter.title}". Goal: ${chapter.description}.`;
-    return callAI("gemini-2.5-flash", AGENT_PROMPTS.WRITER(metadata.tone || "Creative", metadata.language, activeLore, fixInstruction), userPrompt, false);
+    return callAI("WRITING", AGENT_PROMPTS.WRITER(metadata.tone || "Creative", metadata.language, targetWordCount, activeLore, fixInstruction), userPrompt, false);
   },
 
   // New method for refactoring chapters
@@ -127,8 +142,8 @@ export const geminiService = {
 
 
     const userPrompt = `Original Content for Revision: """\n${chapterContent}\n"""`;
-    
-    return callAI("gemini-2.5-flash", systemInstruction, userPrompt, false, undefined, maxOutputTokens, thinkingBudget);
+
+    return callAI("WRITING", systemInstruction, userPrompt, false, undefined, maxOutputTokens, thinkingBudget);
   },
 
   async auditChapter(content: string, activeLore: LoreEntry[]): Promise<{ isPass: boolean; score: number; feedback: string }> {
@@ -142,7 +157,7 @@ export const geminiService = {
       required: ["isPass", "score", "feedback"]
     };
     const prompt = `Text: ${content.slice(0, 10000)}\n\nActive Lore to Check Against: ${JSON.stringify(activeLore)}`;
-    return callAI("gemini-2.5-flash", AGENT_PROMPTS.AUDITOR, prompt, true, schema);
+    return callAI("AUDIT", AGENT_PROMPTS.AUDITOR, prompt, true, schema);
   },
 
   async extractLore(content: string): Promise<LoreEntry[]> {
@@ -161,7 +176,7 @@ export const geminiService = {
         required: ["name", "category", "description"]
       }
     };
-    return callAI("gemini-2.5-flash", AGENT_PROMPTS.WORLD_ARCHITECT, content.slice(0, 10000), true, schema);
+    return callAI("OUTLINE", AGENT_PROMPTS.WORLD_ARCHITECT, content.slice(0, 10000), true, schema);
   },
 
   async generateOutline(title: string, strategy: ProjectStrategy, language: string, length: string): Promise<Partial<Chapter>[]> {
@@ -175,7 +190,7 @@ export const geminiService = {
         }
       }
     };
-    return callAI("gemini-2.5-flash", AGENT_PROMPTS.DIRECTOR, `Outline "${title}" in ${language}.`, true, schema);
+    return callAI("OUTLINE", AGENT_PROMPTS.DIRECTOR, `Outline "${title}" in ${language}.`, true, schema);
   },
 
   async performMarketAnalysis(niche: string, language: string): Promise<ProjectStrategy> {
@@ -188,14 +203,14 @@ export const geminiService = {
         pricingStrategy: { type: Type.OBJECT, properties: { suggestedPrice: { type: Type.NUMBER }, reasoning: { type: Type.STRING } } }
       }
     };
-    return callAI("gemini-2.5-flash", "SEO Expert", `KDP niche: ${niche}`, true, schema);
+    return callAI("OUTLINE", "SEO Expert", `KDP niche: ${niche}`, true, schema);
   },
 
   async diagnose(error: string, feedback: string): Promise<string> {
     const schema = {
       type: Type.OBJECT, properties: { fixInstruction: { type: Type.STRING } }
     };
-    const res = await callAI<{fixInstruction: string}>("gemini-2.5-flash", AGENT_PROMPTS.SYSTEM_ANALYST, `Reason for failure: "${error}". Detailed feedback from auditor: "${feedback}". Based on this, provide a concise, actionable, and specific instruction for the writing agent to correct the content and pass the audit. Focus on *how* to fix it.`, true, schema);
+    const res = await callAI<{fixInstruction: string}>("AUDIT", AGENT_PROMPTS.SYSTEM_ANALYST, `Reason for failure: "${error}". Detailed feedback from auditor: "${feedback}". Based on this, provide a concise, actionable, and specific instruction for the writing agent to correct the content and pass the audit. Focus on *how* to fix it.`, true, schema);
     return res.fixInstruction;
   },
 
@@ -217,7 +232,7 @@ export const geminiService = {
         required: ["title", "niche", "profitabilityScore"]
       }
     };
-    return callAI<MarketSuggestion[]>("gemini-2.5-flash", "Market Researcher", `Trending KDP niches for ${language}`, true, schema);
+    return callAI<MarketSuggestion[]>("OUTLINE", "Market Researcher", `Trending KDP niches for ${language}`, true, schema);
   },
 
   // Method to analyze an imported book for refactoring
@@ -258,7 +273,7 @@ export const geminiService = {
     };
     // Prompt'u güncelleyerek AI'dan bölüm tespiti istendi
     const prompt = `Analyze this book in ${language}. Provide a title, summary, detected niche, current tone, and an estimation of how many chapters it contains. Crucially, also attempt to identify the existing chapter divisions within the text. For each detected chapter, extract its estimated title and its full content. If no clear chapter divisions are found, return the entire content as a single detected chapter. Only detect chapters if they are clearly delimited by headings like "Chapter X", "Bölüm Y", or distinct section titles, or by significant structural breaks (e.g., several blank lines followed by a new section title). Respond in JSON based on the provided schema.\n\nBook Content: ${content.slice(0, 5000)}`;
-    return callAI<RefactorAnalysis>("gemini-2.5-flash", "Senior Book Analyst", prompt, true, schema);
+    return callAI<RefactorAnalysis>("OUTLINE", "Senior Book Analyst", prompt, true, schema);
   },
 
   async generateAudio(text: string): Promise<string | undefined> {
@@ -309,7 +324,7 @@ export const geminiService = {
       required: ["backendKeywords", "competitorGaps"]
     };
     const prompt = `You are an Amazon KDP SEO expert. Generate exactly 7 high-value backend keywords for the following book.\n\nTitle: "${title}"\nDescription: "${description}"\nLanguage: ${language}\n\nReturn 7 backend keywords in the "backendKeywords" array and 3 competitor gap opportunities in "competitorGaps".`;
-    return callAI("gemini-2.5-flash", "Amazon KDP SEO Specialist", prompt, true, schema);
+    return callAI("OUTLINE", "Amazon KDP SEO Specialist", prompt, true, schema);
   },
 
   async runLegalAudit(fullContent: string, title: string): Promise<{ riskLevel: 'low' | 'medium' | 'high'; findings: string }> {
@@ -322,7 +337,7 @@ export const geminiService = {
       required: ["riskLevel", "findings"]
     };
     const prompt = `You are a legal compliance advisor specializing in Amazon KDP publishing. Analyze the following manuscript for:\n1. Potential trademark or copyright violations (generic terms vs registered marks)\n2. KDP Content Policy violations (hate speech, violence, sexual content guidelines)\n3. Factual accuracy risks that could lead to legal liability\n4. Any brand name misuse\n\nTitle: "${title}"\nManuscript excerpt (first 8000 chars): "${fullContent.slice(0, 8000)}"\n\nProvide a risk level (low/medium/high) and detailed findings with specific recommendations.`;
-    return callAI("gemini-2.5-flash", "KDP Legal Compliance Agent", prompt, true, schema);
+    return callAI("AUDIT", "KDP Legal Compliance Agent", prompt, true, schema);
   },
 
   async suggestTrailerPrompt(title: string, description: string): Promise<string> {
@@ -333,7 +348,7 @@ export const geminiService = {
       },
       required: ["prompt"]
     };
-    const res = await callAI<{ prompt: string }>("gemini-2.5-flash", "Cinematic Trailer Director", `Create a vivid, atmospheric cinematic trailer prompt for the book:\nTitle: "${title}"\nDescription: "${description}"\n\nThe prompt should describe a 5-10 second cinematic scene that captures the essence of the book. Include lighting, mood, camera angle, and visual details.`, true, schema);
+    const res = await callAI<{ prompt: string }>("WRITING", "Cinematic Trailer Director", `Create a vivid, atmospheric cinematic trailer prompt for the book:\nTitle: "${title}"\nDescription: "${description}"\n\nThe prompt should describe a 5-10 second cinematic scene that captures the essence of the book. Include lighting, mood, camera angle, and visual details.`, true, schema);
     return res.prompt;
   },
 
@@ -348,6 +363,6 @@ export const geminiService = {
       required: ["instagram", "twitter", "email"]
     };
     const prompt = `You are a social media marketing expert for book launches. Create a launch kit for the following book in ${language}:\n\nTitle: "${title}"\nDescription: "${description}"\n\nGenerate:\n- 3 Instagram post captions (with relevant hashtags)\n- 3 Twitter/X thread starter posts\n- 1 launch email template\n\nMake the content engaging, platform-appropriate, and focused on driving book sales on Amazon KDP.`;
-    return callAI("gemini-2.5-flash", "Book Launch Marketing Agent", prompt, true, schema);
+    return callAI("OUTLINE", "Book Launch Marketing Agent", prompt, true, schema);
   }
 };
