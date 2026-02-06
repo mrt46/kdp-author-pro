@@ -17,6 +17,10 @@ import RefactorerView from './components/RefactorerView';
 import LegalCounselView from './components/LegalCounselView';
 import MarketingView from './components/MarketingView';
 import IllustratorPanel from './components/IllustratorPanel';
+import BookLibrary from './components/BookLibrary';
+import CostDashboard from './components/CostDashboard';
+import OriginalityCheckView from './components/OriginalityCheckView';
+import ReviewDashboard from './components/ReviewDashboard';
 
 const STORAGE_KEY = 'kdp-author-pro-books';
 const STORAGE_ACTIVE = 'kdp-author-pro-active';
@@ -35,7 +39,7 @@ function loadActiveBookId(): string | null {
 const MAX_RETRIES = 5;
 
 const App: React.FC = () => {
-  const [view, setView] = useState<AppState>('dashboard');
+  const [view, setView] = useState<AppState>('book-library');
   const [books, setBooks] = useState<Book[]>(loadBooks);
   const [activeBookId, setActiveBookId] = useState<string | null>(loadActiveBookId);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
@@ -266,7 +270,7 @@ const App: React.FC = () => {
         id: bookId,
         metadata: { title, subtitle: "", description: strategy.marketAnalysis, keywords: strategy.seoKeywords, categories: [], targetAudience: strategy.targetAudience, language, strategy, tone, targetLength: length },
         chapters: outline.map(ch => ({ id: crypto.randomUUID(), title: ch.title || "Untitled", description: ch.description, content: "", wordCount: 0, status: 'empty' })),
-        illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], createdAt: Date.now(), updatedAt: Date.now()
+        illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], createdAt: Date.now(), updatedAt: Date.now()
       };
       
       setBooks(prev => [...prev, newBook]);
@@ -353,7 +357,7 @@ const App: React.FC = () => {
         }
       },
       chapters: initialChapters,
-      illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], createdAt: Date.now(), updatedAt: Date.now()
+      illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], createdAt: Date.now(), updatedAt: Date.now()
     };
 
     setBooks(prev => [...prev, newBook]);
@@ -580,11 +584,40 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSelectBook = (bookId: string) => {
+    setActiveBookId(bookId);
+    setActiveChapterIndex(0);
+    setView('editor');
+  };
+
+  const handleDeleteBook = (bookId: string) => {
+    setBooks(prev => prev.filter(b => b.id !== bookId));
+    if (activeBookId === bookId) {
+      setActiveBookId(null);
+      setView('book-library');
+    }
+  };
+
+  const handleRegenerateChapter = async (chapterIndex: number) => {
+    if (!activeBook) return;
+    await runChapterLoop(activeBook.id, chapterIndex);
+  };
+
+  const handleEditChapter = (chapterIndex: number) => {
+    setActiveChapterIndex(chapterIndex);
+    setView('editor');
+  };
+
+  const handleApproveAll = () => {
+    // After approving all chapters, navigate to export or other view
+    setView('export-lab');
+  };
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f172a] text-slate-100 font-sans">
       <Header view={view} setView={setView} bookTitle={activeBook?.metadata.title} hasBook={!!activeBook} onExport={() => {}} onExportPDF={() => setView('export-lab')} saveStatus={saveStatus} backgroundTasksCount={isGenerating ? 1 : 0} />
       <div className="flex flex-1 overflow-hidden">
-        {activeBook && !['dashboard', 'strategy', 'orchestrator', 'book-config', 'book-refactorer'].includes(view) && (
+        {activeBook && !['dashboard', 'strategy', 'orchestrator', 'book-config', 'book-refactorer', 'book-library', 'cost-dashboard', 'originality-check', 'review-dashboard'].includes(view) && (
           <Sidebar
             activeBook={activeBook}
             activeChapterIndex={activeChapterIndex}
@@ -595,6 +628,35 @@ const App: React.FC = () => {
           />
         )}
         <main className="flex-1 overflow-y-auto bg-slate-50 text-slate-900 relative">
+          {view === 'book-library' && (
+            <BookLibrary
+              books={books}
+              onSelectBook={handleSelectBook}
+              onNewBook={() => setView('strategy')}
+              onDeleteBook={handleDeleteBook}
+            />
+          )}
+          {view === 'cost-dashboard' && (
+            <CostDashboard
+              book={activeBook || undefined}
+              onBack={() => setView(activeBook ? 'editor' : 'book-library')}
+            />
+          )}
+          {view === 'originality-check' && activeBook && (
+            <OriginalityCheckView
+              book={activeBook}
+              onBack={() => setView('editor')}
+            />
+          )}
+          {view === 'review-dashboard' && activeBook && (
+            <ReviewDashboard
+              book={activeBook}
+              onBack={() => setView('editor')}
+              onRegenerateChapter={handleRegenerateChapter}
+              onEditChapter={handleEditChapter}
+              onApproveAll={handleApproveAll}
+            />
+          )}
           {view === 'dashboard' && <Dashboard onNewBook={() => setView('strategy')} onImportBook={() => setView('book-refactorer')} activeBook={activeBook} onContinue={() => setView('editor')} onSelectResource={() => {}} />}
           {view === 'strategy' && <StrategyPlanner onStrategySelected={(s, t, l) => { setPendingStrategy({ strategy: s, title: t, language: l }); setView('book-config'); }} addLog={addLog} logs={logs} />}
           {view === 'book-config' && pendingStrategy && <BookConfigView title={pendingStrategy.title} onStart={handleStartProduction} onBack={() => setView('strategy')} />}
