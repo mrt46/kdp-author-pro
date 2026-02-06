@@ -32,6 +32,10 @@ const PROFILES: { label: string; value: AIProfile; icon: string }[] = [
 const MetadataView: React.FC<MetadataViewProps> = ({ metadata, chapters, modelAssignment, onSave, onGenerateOutline, onClearOutline, isGenerating, onOptimizeSEO }) => {
   const [form, setForm] = useState<BookMetadata>(metadata);
   const [assignment, setAssignment] = useState<ModelAssignment>(modelAssignment);
+  const [paperSize, setPaperSize] = useState<string>('6x9');
+  const [hasBleed, setHasBleed] = useState<boolean>(false);
+
+  const canSave = form.title.trim().length > 0 && form.description.trim().length > 0;
 
   return (
     <div className="p-10 max-w-6xl mx-auto space-y-10 pb-32">
@@ -116,21 +120,40 @@ const MetadataView: React.FC<MetadataViewProps> = ({ metadata, chapters, modelAs
           <div className="bg-white rounded-[32px] p-8 border border-slate-200 shadow-sm">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-widest mb-6">Mizanpaj Ayarları</h3>
             <div className="space-y-4">
-              <select className="w-full p-3 rounded-xl border border-slate-100 text-sm font-medium">
-                <option>6" x 9" (Standard)</option>
-                <option>5.5" x 8.5"</option>
-                <option>8.5" x 11" (Large)</option>
+              <select
+                value={paperSize}
+                onChange={(e) => setPaperSize(e.target.value)}
+                className="w-full p-3 rounded-xl border border-slate-100 text-sm font-medium focus:border-indigo-500 focus:outline-none"
+              >
+                <option value="6x9">6" x 9" (Standard)</option>
+                <option value="5.5x8.5">5.5" x 8.5"</option>
+                <option value="8.5x11">8.5" x 11" (Large)</option>
               </select>
               <div className="flex items-center gap-2">
-                <input type="checkbox" id="bleed" className="w-4 h-4 text-indigo-600" />
+                <input
+                  type="checkbox"
+                  id="bleed"
+                  checked={hasBleed}
+                  onChange={(e) => setHasBleed(e.target.checked)}
+                  className="w-4 h-4 text-indigo-600"
+                />
                 <label htmlFor="bleed" className="text-xs text-slate-500 font-bold uppercase">Bleed (Taşma Payı)</label>
               </div>
             </div>
           </div>
 
-          <button onClick={() => onSave(form, assignment)} className="w-full bg-indigo-600 text-white py-5 rounded-[24px] font-black text-lg hover:bg-indigo-700 transition-all shadow-xl">
+          <button
+            onClick={() => onSave(form, assignment)}
+            disabled={!canSave}
+            className="w-full bg-indigo-600 text-white py-5 rounded-[24px] font-black text-lg hover:bg-indigo-700 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             Ayarları Kaydet
           </button>
+          {!canSave && (
+            <p className="text-xs text-red-500 font-medium text-center mt-2">
+              Başlık ve açıklama alanları zorunludur
+            </p>
+          )}
         </div>
       </div>
     </div>
