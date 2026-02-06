@@ -137,7 +137,7 @@ class OriginalityService {
             scannedSources.push(googleBooksResult.source);
           }
         } catch (error) {
-          console.error('External scan error:', error);
+          console.error('Harici tarama hatası:', error);
         }
       }
     }
@@ -218,7 +218,7 @@ class OriginalityService {
     external: boolean;
     aiDetection: boolean;
   } = { internal: true, external: true, aiDetection: false }): Promise<OriginalityScanResult> {
-    console.log(`[OriginalityGuardian] Starting scan for book: ${book.metadata.title}`);
+    console.log(`[OriginalityGuardian] Kitap için tarama başlatılıyor: ${book.metadata.title}`);
 
     const allIssues: OriginalityIssue[] = [];
     let scannedSources: string[] = [];
@@ -228,7 +228,7 @@ class OriginalityService {
 
     // Phase 1: Internal
     if (phases.internal) {
-      console.log('[OriginalityGuardian] Phase 1: Internal consistency check...');
+      console.log('[OriginalityGuardian] Faz 1: İç tutarlılık kontrolü...');
       const internal = await this.checkInternalConsistency(book);
       internalScore = internal.score;
       allIssues.push(...internal.issues);
@@ -236,7 +236,7 @@ class OriginalityService {
 
     // Phase 2: External
     if (phases.external) {
-      console.log('[OriginalityGuardian] Phase 2: External similarity scan...');
+      console.log('[OriginalityGuardian] Faz 2: Harici benzerlik taraması...');
       const external = await this.checkExternalSimilarity(book);
       externalScore = external.score;
       allIssues.push(...external.issues);
@@ -245,7 +245,7 @@ class OriginalityService {
 
     // Phase 3: AI Detection
     if (phases.aiDetection) {
-      console.log('[OriginalityGuardian] Phase 3: AI signature detection...');
+      console.log('[OriginalityGuardian] Faz 3: AI imza tespiti...');
       const aiDetection = await this.detectAISignature(book);
       aiDetectionScore = aiDetection.score;
       allIssues.push(...aiDetection.issues);
@@ -277,7 +277,7 @@ class OriginalityService {
       scannedSources,
     };
 
-    console.log(`[OriginalityGuardian] Scan complete. Score: ${overallScore}/100, Status: ${status}`);
+    console.log(`[OriginalityGuardian] Tarama tamamlandı. Skor: ${overallScore}/100, Durum: ${status}`);
     return result;
   }
 
@@ -395,16 +395,51 @@ class OriginalityService {
     matchPercentage: number;
     source: string;
   }> {
-    // Google Books API integration (mock for now)
-    // In production, use: https://www.googleapis.com/books/v1/volumes?q={phrase}
+    // Real Google Books API integration
+    const apiKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY;
 
-    // For now, return random results for demo
-    const isMatch = Math.random() < 0.1; // 10% chance of match for testing
-    return {
-      matchFound: isMatch,
-      matchPercentage: isMatch ? Math.floor(Math.random() * 30) + 60 : 0,
-      source: isMatch ? 'Sample Book Title (Google Books)' : '',
-    };
+    if (!apiKey) {
+      console.warn('Google Books API key eksik. .env dosyasına VITE_GOOGLE_BOOKS_API_KEY ekleyin.');
+      return { matchFound: false, matchPercentage: 0, source: '' };
+    }
+
+    try {
+      const query = encodeURIComponent(phrase);
+      const url = `https://www.googleapis.com/books/v1/volumes?q="${query}"&key=${apiKey}&maxResults=5`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error('Google Books API hatası:', response.status);
+        return { matchFound: false, matchPercentage: 0, source: '' };
+      }
+
+      const data = await response.json();
+      if (data.totalItems === 0 || !data.items) {
+        return { matchFound: false, matchPercentage: 0, source: '' };
+      }
+
+      // Check first result for text match
+      const firstBook = data.items[0];
+      const bookTitle = firstBook.volumeInfo?.title || 'Unknown Book';
+      const bookSnippet = firstBook.searchInfo?.textSnippet || '';
+
+      // Calculate similarity between phrase and snippet
+      const similarity = this.calculateSimilarity(phrase, bookSnippet);
+
+      if (similarity > 0.6) {
+        // Match found
+        return {
+          matchFound: true,
+          matchPercentage: Math.round(similarity * 100),
+          source: `${bookTitle} (Google Books)`,
+        };
+      }
+
+      return { matchFound: false, matchPercentage: 0, source: '' };
+    } catch (error) {
+      console.error('Google Books API araması başarısız:', error);
+      return { matchFound: false, matchPercentage: 0, source: '' };
+    }
   }
 
   private calculatePerplexity(text: string): number {

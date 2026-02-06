@@ -36,11 +36,27 @@ const StrategyPlanner: React.FC<StrategyPlannerProps> = ({ onStrategySelected, a
 
   const handleStartCustomProtocol = async () => {
     if (!manualTitle.trim()) return;
-    
+
     setIsAnalyzing(true);
     addLog('Director', `Preparing autonomous mission order for custom title: "${manualTitle}"...`);
     try {
       const result = await geminiService.performMarketAnalysis(manualTitle, selectedLanguage);
+
+      // Auto-load market gaps and backend keywords
+      addLog('SEO Analyst', 'Pazar açıklarını ve SEO anahtar kelimelerini analiz ediyor...', undefined, 'info');
+      try {
+        const seoData = await geminiService.generateSEOKeywords(
+          manualTitle,
+          result.marketAnalysis || `Strategic roadmap for: ${manualTitle}`,
+          selectedLanguage
+        );
+        result.competitorGaps = seoData.competitorGaps;
+        result.backendKeywords = seoData.backendKeywords;
+        addLog('SEO Analyst', `${seoData.competitorGaps.length} pazar açığı ve ${seoData.backendKeywords.length} backend anahtar kelime belirlendi`, undefined, 'success');
+      } catch (seoError) {
+        addLog('SEO Analyst', 'SEO analizi atlandı, daha sonra yapılabilir', undefined, 'warning');
+      }
+
       setStrategy(result);
       setEditableBrief(result.marketAnalysis || `Strategic roadmap for: ${manualTitle}.`);
       setEditableChapters(result.suggestedChapters || []);
