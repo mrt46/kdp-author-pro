@@ -18,7 +18,7 @@ const LoreBibleView: React.FC<LoreBibleViewProps> = ({ lore, onRefresh, isGenera
   );
 
   return (
-    <div className="p-10 max-w-7xl mx-auto space-y-10 pb-32">
+    <div className="p-10 max-w-7xl mx-auto space-y-10 pb-32 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 100px)' }}>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 animate-slide">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Structured <span className="text-indigo-600">Memory</span></h2>
