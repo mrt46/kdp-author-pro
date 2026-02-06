@@ -17,7 +17,40 @@ const CostDashboard: React.FC<CostDashboardProps> = ({ book, onBack }) => {
     setAnalytics(data);
   }, [book]);
 
-  if (!analytics) return <div className="p-8">Loading...</div>;
+  if (!analytics) return <div className="p-8">Yükleniyor...</div>;
+
+  // Empty state check
+  if (analytics.totalCost === 0) {
+    return (
+      <div className="flex flex-col h-full bg-slate-50">
+        <div className="p-8 bg-white border-b border-slate-200">
+          <div className="max-w-7xl mx-auto">
+            <button
+              onClick={onBack}
+              className="text-slate-500 hover:text-slate-700 font-bold mb-4 transition-colors"
+            >
+              ← Back
+            </button>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">
+              💰 Cost Analytics
+            </h1>
+            <p className="text-slate-500 mt-2">
+              {book ? `"${book.metadata.title}" için maliyet analizi` : 'Tüm proje maliyetleri'}
+            </p>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="text-center">
+            <div className="text-6xl mb-4">📊</div>
+            <h2 className="text-2xl font-black text-slate-900 mb-2">Henüz API Kullanımı Yok</h2>
+            <p className="text-slate-500 max-w-md">
+              Kitap üretimi başladığında maliyet verileri burada görünecektir.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const formatCost = (cost: number) => `$${cost.toFixed(4)}`;
   const formatDuration = (ms: number) => `${(ms / 1000).toFixed(1)}s`;

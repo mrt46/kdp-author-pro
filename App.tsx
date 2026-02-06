@@ -270,7 +270,7 @@ const App: React.FC = () => {
         id: bookId,
         metadata: { title, subtitle: "", description: strategy.marketAnalysis, keywords: strategy.seoKeywords, categories: [], targetAudience: strategy.targetAudience, language, strategy, tone, targetLength: length },
         chapters: outline.map(ch => ({ id: crypto.randomUUID(), title: ch.title || "Untitled", description: ch.description, content: "", wordCount: 0, status: 'empty' })),
-        illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], createdAt: Date.now(), updatedAt: Date.now()
+        illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], originalityIssues: [], createdAt: Date.now(), updatedAt: Date.now()
       };
       
       setBooks(prev => [...prev, newBook]);
@@ -337,27 +337,27 @@ const App: React.FC = () => {
 
     const newBook: Book = {
       id: newBookId,
-      metadata: { 
-        title: analysis.title, 
-        subtitle: "Revize Edilen Sürüm", 
-        description: analysis.summary, 
-        keywords: [], 
-        categories: [], 
-        targetAudience: "Genel", 
-        language: selectedLanguage, 
+      metadata: {
+        title: analysis.title,
+        subtitle: "Revize Edilen Sürüm",
+        description: analysis.summary,
+        keywords: [],
+        categories: [],
+        targetAudience: "Genel",
+        language: selectedLanguage,
         tone: analysis.currentTone,
-        targetLength: "standard", 
+        targetLength: "standard",
         strategy: {
             niche: analysis.detectedNiche,
-            genre: "Genel", 
-            targetAudience: "Genel", 
+            genre: "Genel",
+            targetAudience: "Genel",
             pageCountGoal: initialChapters.length * 50, // Bölüm sayısına göre güncellendi
             marketAnalysis: analysis.summary,
-            seoKeywords: [], 
+            seoKeywords: [],
         }
       },
       chapters: initialChapters,
-      illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], createdAt: Date.now(), updatedAt: Date.now()
+      illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], originalityIssues: [], createdAt: Date.now(), updatedAt: Date.now()
     };
 
     setBooks(prev => [...prev, newBook]);
@@ -646,6 +646,7 @@ const App: React.FC = () => {
             <OriginalityCheckView
               book={activeBook}
               onBack={() => setView('editor')}
+              updateBook={updateBook}
             />
           )}
           {view === 'review-dashboard' && activeBook && (
