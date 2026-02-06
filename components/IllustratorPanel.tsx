@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Book, Illustration } from '../types';
 
 interface IllustratorPanelProps {
@@ -7,12 +7,28 @@ interface IllustratorPanelProps {
   onGenerate: () => void;
   onEdit: (id: string, instruction: string) => void;
   isGenerating: boolean;
-  pendingPrompt: any;
+  pendingPrompt: {id: string; prompt: string} | null;
   onConfirm: (editedPrompt: string) => void;
   onCancel: () => void;
 }
 
-const IllustratorPanel: React.FC<IllustratorPanelProps> = ({ book, onGenerate, isGenerating }) => {
+const IllustratorPanel: React.FC<IllustratorPanelProps> = ({
+  book,
+  onGenerate,
+  onEdit,
+  isGenerating,
+  pendingPrompt,
+  onConfirm,
+  onCancel
+}) => {
+  const [editedPromptText, setEditedPromptText] = useState('');
+
+  useEffect(() => {
+    if (pendingPrompt) {
+      setEditedPromptText(pendingPrompt.prompt);
+    }
+  }, [pendingPrompt]);
+
   return (
     <div className="p-10 max-w-7xl mx-auto space-y-12 pb-32">
       <div className="flex items-center justify-between animate-slide">
@@ -61,7 +77,13 @@ const IllustratorPanel: React.FC<IllustratorPanelProps> = ({ book, onGenerate, i
                 </span>
               </div>
               <div className="absolute inset-x-0 bottom-0 p-8 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-                 <p className="text-[10px] text-white/60 font-medium line-clamp-2 italic leading-relaxed">"{ill.prompt}"</p>
+                 <p className="text-[10px] text-white/60 font-medium line-clamp-2 italic leading-relaxed mb-3">"{ill.prompt}"</p>
+                 <button
+                   onClick={() => onEdit(ill.id, ill.prompt)}
+                   className="bg-white/20 hover:bg-white/30 backdrop-blur-md text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/20 transition-all"
+                 >
+                   Edit Prompt
+                 </button>
               </div>
             </div>
           </div>
@@ -75,6 +97,68 @@ const IllustratorPanel: React.FC<IllustratorPanelProps> = ({ book, onGenerate, i
           </div>
         )}
       </div>
+
+      {/* Edit Prompt Modal */}
+      {pendingPrompt && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-8">
+          <div className="bg-white rounded-[40px] max-w-3xl w-full p-10 shadow-2xl border border-slate-200 animate-slide">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-black text-slate-900">Edit Illustration Prompt</h3>
+              <button
+                onClick={onCancel}
+                disabled={isGenerating}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-3">Original Prompt</label>
+                <p className="text-sm text-slate-500 bg-slate-50 p-4 rounded-2xl border border-slate-200 italic">
+                  "{pendingPrompt.prompt}"
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-3">New Prompt</label>
+                <textarea
+                  value={editedPromptText}
+                  onChange={(e) => setEditedPromptText(e.target.value)}
+                  disabled={isGenerating}
+                  className="w-full h-40 px-6 py-4 border-2 border-slate-200 rounded-2xl resize-none focus:border-indigo-500 focus:outline-none transition-colors text-slate-900 font-medium"
+                  placeholder="Enter your new prompt for the illustration..."
+                />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button
+                  onClick={() => onConfirm(editedPromptText)}
+                  disabled={isGenerating || !editedPromptText.trim()}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-8 py-4 rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3"
+                >
+                  {isGenerating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Regenerating...
+                    </>
+                  ) : (
+                    'Regenerate'
+                  )}
+                </button>
+                <button
+                  onClick={onCancel}
+                  disabled={isGenerating}
+                  className="px-8 py-4 border-2 border-slate-200 rounded-2xl font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

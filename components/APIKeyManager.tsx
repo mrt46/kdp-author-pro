@@ -15,8 +15,28 @@ const APIKeyManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     const saved = localStorage.getItem('kdp_api_keys');
     return saved ? JSON.parse(saved) : {};
   });
+  const [errors, setErrors] = useState<Partial<Record<AIProvider, string>>>({});
+
+  const validateKeys = (): boolean => {
+    const newErrors: Partial<Record<AIProvider, string>> = {};
+
+    // Required keys for basic functionality
+    if (!keys.google?.trim()) {
+      newErrors.google = 'Google Gemini API anahtarı gereklidir (metin üretimi için)';
+    }
+    if (!keys['fal-ai']?.trim()) {
+      newErrors['fal-ai'] = 'Fal.ai API anahtarı gereklidir (kapak tasarımı için)';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSave = () => {
+    if (!validateKeys()) {
+      return;
+    }
+
     localStorage.setItem('kdp_api_keys', JSON.stringify(keys));
     Object.entries(keys).forEach(([provider, key]) => {
       const p = PROVIDERS.find(pr => pr.id === provider);
@@ -42,14 +62,28 @@ const APIKeyManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <div key={provider.id} className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">
                 {provider.label}
+                {(provider.id === 'google' || provider.id === 'fal-ai') && (
+                  <span className="text-red-500 ml-1">*</span>
+                )}
               </label>
               <input
                 type="password"
                 value={keys[provider.id] || ''}
-                onChange={(e) => setKeys({ ...keys, [provider.id]: e.target.value })}
+                onChange={(e) => {
+                  setKeys({ ...keys, [provider.id]: e.target.value });
+                  // Clear error on change
+                  if (errors[provider.id]) {
+                    setErrors({ ...errors, [provider.id]: undefined });
+                  }
+                }}
                 placeholder={`Enter ${provider.label} API Key...`}
-                className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-mono text-sm"
+                className={`w-full p-4 rounded-2xl bg-slate-50 border ${
+                  errors[provider.id] ? 'border-red-500' : 'border-slate-200'
+                } focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all font-mono text-sm`}
               />
+              {errors[provider.id] && (
+                <p className="text-xs text-red-500 font-medium pl-1">{errors[provider.id]}</p>
+              )}
             </div>
           ))}
         </div>

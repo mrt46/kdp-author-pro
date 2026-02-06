@@ -7,6 +7,7 @@ interface ReviewDashboardProps {
   onRegenerateChapter: (chapterIndex: number) => void;
   onEditChapter: (chapterIndex: number) => void;
   onApproveAll: () => void;
+  onPreview?: () => void;
 }
 
 const ReviewDashboard: React.FC<ReviewDashboardProps> = ({
@@ -15,6 +16,7 @@ const ReviewDashboard: React.FC<ReviewDashboardProps> = ({
   onRegenerateChapter,
   onEditChapter,
   onApproveAll,
+  onPreview,
 }) => {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [selectedChapterIndex, setSelectedChapterIndex] = useState<number | null>(null);
@@ -160,7 +162,11 @@ const ReviewDashboard: React.FC<ReviewDashboardProps> = ({
                   >
                     🔄 Regenerate
                   </button>
-                  <button className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300 transition-all">
+                  <button
+                    onClick={onPreview}
+                    disabled={!onPreview}
+                    className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
                     👁️ Preview
                   </button>
                 </div>
