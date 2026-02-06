@@ -70,6 +70,7 @@ export interface Chapter {
   description?: string;
   content: string;
   wordCount: number;
+  targetWordCount?: number;  // Target word count for this chapter
   status: ChapterStatus;
   auditNotes?: string;
   failureDiagnosis?: string;
