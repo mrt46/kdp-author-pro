@@ -1,6 +1,7 @@
 import {
   Book,
   OriginalityIssue,
+  OriginalityIssueRecord,
   OriginalityScanResult,
   AIDetectionMetrics,
 } from '../types';
@@ -278,6 +279,86 @@ class OriginalityService {
 
     console.log(`[OriginalityGuardian] Scan complete. Score: ${overallScore}/100, Status: ${status}`);
     return result;
+  }
+
+  /**
+   * Scan book with issue tracking and persistence
+   * Compares new scan results with existing issues to track resolution
+   */
+  public async scanBookWithTracking(
+    book: Book,
+    phases: { internal: boolean; external: boolean; aiDetection: boolean }
+  ): Promise<{
+    scanResult: OriginalityScanResult;
+    newIssues: OriginalityIssueRecord[];
+    resolvedIssues: OriginalityIssueRecord[];
+    persistentIssues: OriginalityIssueRecord[];
+  }> {
+    // 1. Yeni scan yap
+    const scanResult = await this.scanBook(book, phases);
+
+    // 2. Eski issues ile karşılaştır
+    const existingIssues = book.originalityIssues.filter((i) => i.status === 'pending');
+    const newIssues: OriginalityIssueRecord[] = [];
+    const resolvedIssues: OriginalityIssueRecord[] = [];
+    const persistentIssues: OriginalityIssueRecord[] = [];
+
+    // 3. Her yeni issue'yu kontrol et
+    for (const newIssue of scanResult.issues) {
+      const existingIssue = existingIssues.find(
+        (ei) =>
+          ei.chapterId === newIssue.chapterId &&
+          ei.paragraphIndex === newIssue.paragraphIndex &&
+          this.isSimilarText(ei.originalText, newIssue.text)
+      );
+
+      if (existingIssue) {
+        // Hala mevcut → Persistent
+        persistentIssues.push(existingIssue);
+      } else {
+        // Yeni issue
+        newIssues.push({
+          ...newIssue,
+          status: 'pending',
+          createdAt: Date.now(),
+          originalText: newIssue.text,
+        });
+      }
+    }
+
+    // 4. Çözülen issues'ları bul (artık scanda yok)
+    for (const existingIssue of existingIssues) {
+      const stillExists = scanResult.issues.find(
+        (si) =>
+          si.chapterId === existingIssue.chapterId &&
+          si.paragraphIndex === existingIssue.paragraphIndex &&
+          this.isSimilarText(existingIssue.originalText, si.text)
+      );
+
+      if (!stillExists) {
+        // Artık yok → Resolved (user manually edited)
+        resolvedIssues.push({
+          ...existingIssue,
+          status: 'resolved',
+          resolvedAt: Date.now(),
+          resolutionMethod: 'manual-edit',
+        });
+      }
+    }
+
+    return { scanResult, newIssues, resolvedIssues, persistentIssues };
+  }
+
+  /**
+   * Check if two texts are similar (for issue matching)
+   */
+  private isSimilarText(text1: string, text2: string): boolean {
+    // Jaccard similarity > 0.8 → same paragraph
+    const tokens1 = new Set(text1.toLowerCase().split(/\s+/));
+    const tokens2 = new Set(text2.toLowerCase().split(/\s+/));
+    const intersection = new Set([...tokens1].filter((x) => tokens2.has(x)));
+    const union = new Set([...tokens1, ...tokens2]);
+    return intersection.size / union.size > 0.8;
   }
 
   // Helper Methods

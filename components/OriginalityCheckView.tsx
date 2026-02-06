@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
-import { Book, OriginalityScanResult, OriginalityIssue } from '../types';
+import { Book, OriginalityScanResult, OriginalityIssueRecord } from '../types';
 import { originalityService } from '../services/OriginalityService';
+import { orchestratorService } from '../services/OrchestratorService';
 
 interface OriginalityCheckViewProps {
   book: Book;
   onBack: () => void;
+  updateBook: (id: string, updater: (b: Book) => Book) => void;
 }
 
-const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBack }) => {
+const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBack, updateBook }) => {
   const [isScanning, setIsScanning] = useState(false);
+  const [rewritingIssueId, setRewritingIssueId] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<OriginalityScanResult | null>(
     book.originalityScans && book.originalityScans.length > 0
-      ? book.originalityScans[book.originalityScans.length - 1]
+      ? book.originalityScans[0]
       : null
   );
 
@@ -24,17 +27,149 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
   const handleScan = async () => {
     setIsScanning(true);
     try {
-      const result = await originalityService.scanBook(book, enabledPhases);
-      setScanResult(result);
+      const { scanResult, newIssues, resolvedIssues, persistentIssues } =
+        await originalityService.scanBookWithTracking(book, enabledPhases);
 
-      // Save to book (in real app, update book state in parent)
-      book.originalityScans = [...(book.originalityScans || []), result];
+      // Update book's originality data
+      updateBook(book.id, (b) => ({
+        ...b,
+        originalityScans: [scanResult, ...b.originalityScans],
+        originalityIssues: [
+          ...newIssues,
+          ...persistentIssues,
+          ...resolvedIssues,
+          ...b.originalityIssues.filter((i) => i.status !== 'pending'), // Keep ignored/documented
+        ],
+      }));
+
+      setScanResult(scanResult);
+
+      // Show feedback
+      if (newIssues.length > 0) {
+        console.log(`Tarama tamamlandı: ${newIssues.length} yeni sorun tespit edildi`);
+      }
+      if (resolvedIssues.length > 0) {
+        console.log(`${resolvedIssues.length} sorun çözüldü`);
+      }
     } catch (error) {
-      console.error('Scan failed:', error);
-      alert('Scan failed. Please try again.');
+      console.error('Tarama başarısız:', error);
+      alert('Tarama başarısız oldu. Lütfen tekrar deneyin.');
     } finally {
       setIsScanning(false);
     }
+  };
+
+  const handleAutoRewrite = async (issue: OriginalityIssueRecord) => {
+    setRewritingIssueId(issue.id);
+    try {
+      // AI call to rewrite
+      const response = await orchestratorService.request(
+        'content_generation',
+        `Aşağıdaki paragrafı özgünlük kaybetmeden anlamını koruyarak yeniden yaz:\n\n"${issue.originalText}"`,
+        {
+          agent: 'Revision Specialist',
+          bookId: book.id,
+          chapterId: issue.chapterId,
+          isJson: false,
+        }
+      );
+
+      const rewrittenText = response.content as string;
+
+      // Update chapter content
+      updateBook(book.id, (b) => {
+        const chapters = [...b.chapters];
+        const chapterIndex = chapters.findIndex((c) => c.id === issue.chapterId);
+        if (chapterIndex === -1) return b;
+
+        const chapter = chapters[chapterIndex];
+        const paragraphs = chapter.content.split('\n\n');
+        paragraphs[issue.paragraphIndex] = rewrittenText;
+        chapters[chapterIndex] = {
+          ...chapter,
+          content: paragraphs.join('\n\n'),
+          wordCount: paragraphs.join('\n\n').split(/\s+/).length,
+        };
+
+        // Mark issue as resolved
+        const issues = b.originalityIssues.map((i) =>
+          i.id === issue.id
+            ? {
+                ...i,
+                status: 'resolved' as const,
+                resolvedAt: Date.now(),
+                resolutionMethod: 'auto-rewrite' as const,
+                revisedText: rewrittenText,
+              }
+            : i
+        );
+
+        return { ...b, chapters, originalityIssues: issues };
+      });
+
+      console.log('Paragraf başarıyla yeniden yazıldı');
+    } catch (error) {
+      console.error('Yeniden yazma başarısız:', error);
+      alert('Yeniden yazma işlemi başarısız oldu. Lütfen tekrar deneyin.');
+    } finally {
+      setRewritingIssueId(null);
+    }
+  };
+
+  const handleKeepAndDocument = (issue: OriginalityIssueRecord) => {
+    const userNote = prompt('Bu sorunu neden saklıyorsunuz? (opsiyonel not):');
+
+    updateBook(book.id, (b) => ({
+      ...b,
+      originalityIssues: b.originalityIssues.map((i) =>
+        i.id === issue.id
+          ? {
+              ...i,
+              status: 'ignored' as const,
+              resolvedAt: Date.now(),
+              resolutionMethod: 'kept-documented' as const,
+              userNotes: userNote || 'Kullanıcı tarafından onaylandı',
+            }
+          : i
+      ),
+    }));
+
+    console.log('Sorun belgelendi ve saklandı');
+  };
+
+  const handleDelete = (issue: OriginalityIssueRecord) => {
+    if (!confirm('Bu paragrafı silmek istediğinizden emin misiniz?')) return;
+
+    updateBook(book.id, (b) => {
+      const chapters = [...b.chapters];
+      const chapterIndex = chapters.findIndex((c) => c.id === issue.chapterId);
+      if (chapterIndex === -1) return b;
+
+      const chapter = chapters[chapterIndex];
+      const paragraphs = chapter.content.split('\n\n');
+      paragraphs.splice(issue.paragraphIndex, 1); // Remove paragraph
+      chapters[chapterIndex] = {
+        ...chapter,
+        content: paragraphs.join('\n\n'),
+        wordCount: paragraphs.join('\n\n').split(/\s+/).length,
+      };
+
+      // Mark issue as resolved
+      const issues = b.originalityIssues.map((i) =>
+        i.id === issue.id
+          ? {
+              ...i,
+              status: 'resolved' as const,
+              resolvedAt: Date.now(),
+              resolutionMethod: 'deleted' as const,
+            }
+          : i
+      );
+
+      return { ...b, chapters, originalityIssues: issues };
+    });
+
+    console.log('Paragraf silindi');
   };
 
   const getScoreColor = (score: number) => {
@@ -59,6 +194,10 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
       high: '🚨',
     }[severity];
   };
+
+  // Filter issues
+  const pendingIssues = book.originalityIssues.filter((i) => i.status === 'pending');
+  const resolvedIssues = book.originalityIssues.filter((i) => i.status === 'resolved');
 
   return (
     <div className="flex flex-col h-full bg-slate-50">
@@ -170,14 +309,14 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
                 </div>
               </div>
 
-              {/* Issues */}
-              {scanResult.issues.length > 0 && (
+              {/* Pending Issues */}
+              {pendingIssues.length > 0 && (
                 <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
                   <h3 className="text-lg font-black text-slate-900 mb-4">
-                    🚨 Flagged Issues ({scanResult.issues.length})
+                    🚨 Bekleyen Sorunlar ({pendingIssues.length})
                   </h3>
                   <div className="space-y-4">
-                    {scanResult.issues.map((issue) => (
+                    {pendingIssues.map((issue) => (
                       <div
                         key={issue.id}
                         className="p-5 bg-slate-50 border-2 border-slate-200 rounded-2xl hover:border-indigo-300 transition-all"
@@ -209,20 +348,30 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
                         </div>
 
                         {issue.autoFixSuggestion && (
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="text-indigo-600 font-bold">💡 Suggestion:</span>
+                          <div className="flex items-center gap-2 text-sm mb-3">
+                            <span className="text-indigo-600 font-bold">💡 Öneri:</span>
                             <span className="text-slate-600">{issue.autoFixSuggestion}</span>
                           </div>
                         )}
 
-                        <div className="flex gap-2 mt-3">
-                          <button className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-all">
-                            Auto-Rewrite
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleAutoRewrite(issue)}
+                            disabled={rewritingIssueId === issue.id}
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {rewritingIssueId === issue.id ? 'Yazılıyor...' : 'Auto-Rewrite'}
                           </button>
-                          <button className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-300 transition-all">
+                          <button
+                            onClick={() => handleKeepAndDocument(issue)}
+                            className="px-4 py-2 bg-slate-200 text-slate-700 text-sm font-bold rounded-xl hover:bg-slate-300 transition-all"
+                          >
                             Keep & Document
                           </button>
-                          <button className="px-4 py-2 bg-red-100 text-red-700 text-sm font-bold rounded-xl hover:bg-red-200 transition-all">
+                          <button
+                            onClick={() => handleDelete(issue)}
+                            className="px-4 py-2 bg-red-100 text-red-700 text-sm font-bold rounded-xl hover:bg-red-200 transition-all"
+                          >
                             Delete
                           </button>
                         </div>
@@ -232,18 +381,44 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
                 </div>
               )}
 
-              {scanResult.issues.length === 0 && (
+              {/* Resolved Issues */}
+              {resolvedIssues.length > 0 && (
+                <details className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
+                  <summary className="text-lg font-black text-slate-900 cursor-pointer">
+                    ✅ Çözülen Sorunlar ({resolvedIssues.length})
+                  </summary>
+                  <div className="mt-4 space-y-2">
+                    {resolvedIssues.map((issue) => (
+                      <div key={issue.id} className="p-3 bg-green-50 border border-green-200 rounded-xl">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm text-slate-700">
+                            <strong>{issue.chapterTitle}</strong> • Para {issue.paragraphIndex + 1}
+                          </div>
+                          <div className="text-xs text-green-700 font-bold">
+                            {issue.resolutionMethod === 'auto-rewrite' && 'Yeniden Yazıldı'}
+                            {issue.resolutionMethod === 'manual-edit' && 'Manuel Düzenlendi'}
+                            {issue.resolutionMethod === 'kept-documented' && 'Saklandı'}
+                            {issue.resolutionMethod === 'deleted' && 'Silindi'}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              {pendingIssues.length === 0 && (
                 <div className="bg-green-50 border-2 border-green-200 rounded-3xl p-8 text-center">
                   <div className="text-6xl mb-4">✅</div>
-                  <div className="text-2xl font-black text-green-900">All Clear!</div>
-                  <div className="text-green-700 mt-2">No originality issues detected. Safe to publish.</div>
+                  <div className="text-2xl font-black text-green-900">Hepsi Temiz!</div>
+                  <div className="text-green-700 mt-2">Özgünlük sorunu tespit edilmedi. Yayınlamak güvenli.</div>
                 </div>
               )}
 
               {/* Scanned Sources */}
               {scanResult.scannedSources.length > 0 && (
                 <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm">
-                  <h3 className="text-lg font-black text-slate-900 mb-4">Scanned Sources</h3>
+                  <h3 className="text-lg font-black text-slate-900 mb-4">Taranan Kaynaklar</h3>
                   <div className="text-sm text-slate-600">
                     {scanResult.scannedSources.slice(0, 10).map((source, i) => (
                       <div key={i} className="py-2 border-b border-slate-100 last:border-0">
@@ -252,7 +427,7 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
                     ))}
                     {scanResult.scannedSources.length > 10 && (
                       <div className="text-slate-400 mt-2">
-                        ... and {scanResult.scannedSources.length - 10} more
+                        ... ve {scanResult.scannedSources.length - 10} kaynak daha
                       </div>
                     )}
                   </div>
@@ -264,9 +439,9 @@ const OriginalityCheckView: React.FC<OriginalityCheckViewProps> = ({ book, onBac
           {!scanResult && !isScanning && (
             <div className="bg-white rounded-3xl p-12 border-2 border-dashed border-slate-300 text-center">
               <div className="text-6xl mb-4">🛡️</div>
-              <div className="text-2xl font-black text-slate-900 mb-2">Ready to Scan</div>
+              <div className="text-2xl font-black text-slate-900 mb-2">Taramaya Hazır</div>
               <div className="text-slate-500">
-                Click "Run Full Scan" to check originality and detect plagiarism
+                Özgünlüğü kontrol etmek ve intihal tespiti için "Run Full Scan" tıklayın
               </div>
             </div>
           )}

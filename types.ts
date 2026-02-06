@@ -127,6 +127,8 @@ export interface Book {
   audits: any[];
   legalAudits: LegalAudit[];
   originalityScans: OriginalityScanResult[];
+  originalityIssues: OriginalityIssueRecord[];
+  target?: BookTarget;
   createdAt: number;
   updatedAt: number;
 }
@@ -197,6 +199,16 @@ export interface OriginalityIssue {
   autoFixSuggestion?: string;
 }
 
+export interface OriginalityIssueRecord extends OriginalityIssue {
+  status: 'pending' | 'resolved' | 'ignored' | 'manual-review';
+  createdAt: number;
+  resolvedAt?: number;
+  resolutionMethod?: 'auto-rewrite' | 'manual-edit' | 'kept-documented' | 'deleted';
+  originalText: string;
+  revisedText?: string;
+  userNotes?: string;
+}
+
 export interface OriginalityScanResult {
   id: string;
   bookId: string;
@@ -216,4 +228,18 @@ export interface AIDetectionMetrics {
   vocabularyDiversity: number;
   clicheDensity: number;
   overallRisk: 'low' | 'medium' | 'high';
+}
+
+// Book Target Types
+export interface BookTarget {
+  totalWords: number;
+  totalPages: number;
+  totalChapters: number;
+  avgWordsPerChapter: number;
+  currentProgress: {
+    completedChapters: number;
+    currentWordCount: number;
+    remainingWords: number;
+    adjustedAvgPerChapter: number;
+  };
 }
