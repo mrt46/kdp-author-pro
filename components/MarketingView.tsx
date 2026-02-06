@@ -12,6 +12,8 @@ interface MarketingViewProps {
   launchKit: LaunchKit | null;
 }
 
+const MAX_PROMPT_LENGTH = 1000;
+
 const MarketingView: React.FC<MarketingViewProps> = ({ trailers, onGenerateTrailer, onSuggestPrompt, isGenerating, onGenerateKit, launchKit }) => {
   const [prompt, setPrompt] = useState('');
   const [isSuggesting, setIsSuggesting] = useState(false);
@@ -56,12 +58,20 @@ const MarketingView: React.FC<MarketingViewProps> = ({ trailers, onGenerateTrail
            </button>
         </div>
         <div className="flex flex-col gap-6">
-          <textarea 
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe the cinematic atmosphere... e.g. 'A shadowy silhouette walking through a neon-drenched Tokyo street, high-speed rain, cinematic noir...'"
-            className="w-full bg-white/5 border border-white/10 p-8 rounded-[30px] text-white text-lg font-medium outline-none focus:border-indigo-500 transition-all min-h-[160px] resize-none"
-          />
+          <div className="relative">
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value.slice(0, MAX_PROMPT_LENGTH))}
+              placeholder="Describe the cinematic atmosphere... e.g. 'A shadowy silhouette walking through a neon-drenched Tokyo street, high-speed rain, cinematic noir...'"
+              maxLength={MAX_PROMPT_LENGTH}
+              className="w-full bg-white/5 border border-white/10 p-8 rounded-[30px] text-white text-lg font-medium outline-none focus:border-indigo-500 transition-all min-h-[160px] resize-none"
+            />
+            <div className={`absolute bottom-4 right-6 text-xs font-bold ${
+              prompt.length > MAX_PROMPT_LENGTH * 0.9 ? 'text-orange-400' : 'text-white/40'
+            }`}>
+              {prompt.length} / {MAX_PROMPT_LENGTH}
+            </div>
+          </div>
           <div className="flex justify-end">
             <button 
               onClick={() => onGenerateTrailer(prompt)}

@@ -89,9 +89,10 @@ const BookConfigView: React.FC<BookConfigViewProps> = ({ title, onStart, onBack 
           </div>
 
           <div className="pt-10">
-            <button 
-              onClick={() => onStart(selectedTone.label, selectedLength.id as any)}
-              className="w-full bg-indigo-600 text-white py-6 rounded-[35px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200"
+            <button
+              onClick={() => onStart(selectedTone.id, selectedLength.id as any)}
+              disabled={!selectedTone || !selectedLength}
+              className="w-full bg-indigo-600 text-white py-6 rounded-[35px] font-black text-xl hover:bg-indigo-700 transition-all shadow-2xl shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Start Production (Autonomous)
             </button>

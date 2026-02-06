@@ -64,7 +64,7 @@ async function callAI<T>(model: string, systemInstruction: string, userPrompt: s
     );
     return response.content;
   } catch (error) {
-    console.error(`AI Call Failed [${model}]:`, error);
+    console.error(`AI çağrısı başarısız [${model}]:`, error);
     throw error;
   }
 }
