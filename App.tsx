@@ -112,8 +112,16 @@ const App: React.FC = () => {
 
         // STEP 1: WRITER STAGE
         setTelemetry(p => ({ ...p, activeAgent: 'Writer' }));
-        addLog('Writer', `Generating draft using active context (Attempt ${attempts + 1})...`);
-        const content = await geminiService.writeChapter(currentBook.chapters[chapterIndex], currentBook.metadata, activeLore, fixInstruction);
+
+        // Calculate target word count for this chapter
+        const targetForThisChapter =
+          currentBook.chapters[chapterIndex].targetWordCount ||  // Prefer stored target
+          currentBook.target?.currentProgress.adjustedAvgPerChapter ||  // Use adjusted average
+          currentBook.target?.avgWordsPerChapter ||  // Fallback to initial average
+          5000;  // Absolute fallback
+
+        addLog('Writer', `Hedef: ~${targetForThisChapter} kelime (Deneme ${attempts + 1})...`);
+        const content = await geminiService.writeChapter(currentBook.chapters[chapterIndex], currentBook.metadata, activeLore, targetForThisChapter, fixInstruction);
         
         // STEP 2: AUDITOR STAGE (Consistency Check)
         setTelemetry(p => ({ ...p, activeAgent: 'Auditor' }));
@@ -280,7 +288,15 @@ const App: React.FC = () => {
       const newBook: Book = {
         id: bookId,
         metadata: { title, subtitle: "", description: strategy.marketAnalysis, keywords: strategy.seoKeywords, categories: [], targetAudience: strategy.targetAudience, language, strategy, tone, targetLength: length },
-        chapters: outline.map(ch => ({ id: crypto.randomUUID(), title: ch.title || "Untitled", description: ch.description, content: "", wordCount: 0, status: 'empty' })),
+        chapters: outline.map(ch => ({
+          id: crypto.randomUUID(),
+          title: ch.title || "Untitled",
+          description: ch.description,
+          content: "",
+          wordCount: 0,
+          targetWordCount: avgWordsPerChapter,  // Store target for each chapter
+          status: 'empty'
+        })),
         illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], originalityIssues: [],
         target: {
           totalWords: target.words,
