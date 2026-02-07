@@ -14,11 +14,14 @@ const ExportLab: React.FC<ExportLabProps> = ({ book, onBack }) => {
     margins: 'normal'
   });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleExportClick = () => {
     setIsProcessing(true);
-    
-    // Preparation for PDF (browser print)
+    setError(null);
+
+    try {
+      // Preparation for PDF (browser print)
     if (settings.format === 'pdf') {
       const printContainer = document.getElementById('print-section');
       if (printContainer) {
@@ -72,6 +75,11 @@ const ExportLab: React.FC<ExportLabProps> = ({ book, onBack }) => {
       }
       setIsProcessing(false);
     }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Dışa aktarma sırasında bir hata oluştu');
+      setIsProcessing(false);
+      console.error('Export error:', err);
+    }
   };
 
   return (
@@ -168,6 +176,11 @@ const ExportLab: React.FC<ExportLabProps> = ({ book, onBack }) => {
                {isProcessing && <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
                {isProcessing ? 'Kitap Derleniyor...' : (settings.format === 'pdf' ? 'PDF Oluştur ve İndir' : 'Metni İndir')}
              </button>
+             {error && (
+               <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 text-center">
+                 <p className="text-sm font-bold text-red-700">{error}</p>
+               </div>
+             )}
              <button onClick={onBack} className="w-full py-4 text-slate-400 font-bold hover:text-slate-600 transition-colors">Stüdyoya Geri Dön</button>
           </div>
         </div>

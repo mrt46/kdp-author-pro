@@ -4,9 +4,10 @@ import { Book } from '../types';
 
 interface PreviewProps {
   book: Book;
+  onBack?: () => void;
 }
 
-const Preview: React.FC<PreviewProps> = ({ book }) => {
+const Preview: React.FC<PreviewProps> = ({ book, onBack }) => {
   const [currentPage, setCurrentPage] = useState(0);
 
   const allPages = book.chapters.flatMap((ch, idx) => [
@@ -74,12 +75,28 @@ const Preview: React.FC<PreviewProps> = ({ book }) => {
       
       {/* Control Tools */}
       <div className="mt-10 flex gap-4 animate-slide" style={{ animationDelay: '0.2s' }}>
-        <button className="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 hover:border-indigo-200 transition-all flex items-center gap-2">
-           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-           Back
-        </button>
-        <button className="bg-slate-900 border-2 border-slate-900 px-10 py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-white hover:bg-indigo-600 hover:border-indigo-600 transition-all shadow-xl">
+        {onBack && (
+          <button
+            onClick={onBack}
+            className="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 hover:border-indigo-200 transition-all flex items-center gap-2"
+          >
+             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+             Back
+          </button>
+        )}
+        <button
+          onClick={() => setCurrentPage(prev => Math.min(prev + 1, allPages.length - 1))}
+          disabled={currentPage >= allPages.length - 1}
+          className="bg-slate-900 border-2 border-slate-900 px-10 py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-white hover:bg-indigo-600 hover:border-indigo-600 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+        >
            Next Segment
+        </button>
+        <button
+          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 0))}
+          disabled={currentPage <= 0}
+          className="bg-white border-2 border-slate-200 px-8 py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 hover:border-indigo-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+           Previous
         </button>
       </div>
     </div>

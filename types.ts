@@ -22,6 +22,10 @@ export interface AIUsageMetrics {
   modelId: string;
   provider: AIProvider;
   timestamp: number;
+  bookId?: string; // Track which book this usage belongs to
+  chapterId?: string; // Track which chapter
+  agent?: string; // Track which agent (Writer, Auditor, etc.)
+  duration?: number; // Call duration in ms
 }
 
 export interface UnifiedAIResponse<T> {
@@ -66,6 +70,7 @@ export interface Chapter {
   description?: string;
   content: string;
   wordCount: number;
+  targetWordCount?: number;  // Target word count for this chapter
   status: ChapterStatus;
   auditNotes?: string;
   failureDiagnosis?: string;
@@ -122,6 +127,9 @@ export interface Book {
   loreBible: LoreEntry[];
   audits: any[];
   legalAudits: LegalAudit[];
+  originalityScans: OriginalityScanResult[];
+  originalityIssues: OriginalityIssueRecord[];
+  target?: BookTarget;
   createdAt: number;
   updatedAt: number;
 }
@@ -140,7 +148,7 @@ export interface BookMetadata {
   authorPersona?: AuthorPersona;
 }
 
-export type AppState = 'dashboard' | 'editor' | 'preview' | 'strategy' | 'illustrations' | 'orchestrator' | 'legal-audit' | 'marketing' | 'lore-bible' | 'export-lab' | 'book-config' | 'book-refactorer';
+export type AppState = 'dashboard' | 'editor' | 'preview' | 'strategy' | 'illustrations' | 'orchestrator' | 'legal-audit' | 'marketing' | 'lore-bible' | 'export-lab' | 'book-config' | 'book-refactorer' | 'book-library' | 'cost-dashboard' | 'originality-check' | 'review-dashboard';
 
 export interface AgentLog {
   id: string;
@@ -175,4 +183,64 @@ export interface LegalAudit {
   riskLevel: 'low' | 'medium' | 'high';
   findings: string;
   timestamp: number;
+}
+
+// Originality Guardian Types
+export interface OriginalityIssue {
+  id: string;
+  chapterId: string;
+  chapterTitle: string;
+  paragraphIndex: number;
+  text: string;
+  issueType: 'duplicate' | 'external-match' | 'ai-signature';
+  severity: 'low' | 'medium' | 'high';
+  details: string;
+  matchPercentage?: number;
+  matchSource?: string;
+  autoFixSuggestion?: string;
+}
+
+export interface OriginalityIssueRecord extends OriginalityIssue {
+  status: 'pending' | 'resolved' | 'ignored' | 'manual-review';
+  createdAt: number;
+  resolvedAt?: number;
+  resolutionMethod?: 'auto-rewrite' | 'manual-edit' | 'kept-documented' | 'deleted';
+  originalText: string;
+  revisedText?: string;
+  userNotes?: string;
+}
+
+export interface OriginalityScanResult {
+  id: string;
+  bookId: string;
+  timestamp: number;
+  overallScore: number; // 0-100
+  internalScore: number; // 0-100
+  externalScore: number; // 0-100
+  aiDetectionScore: number; // 0-100
+  issues: OriginalityIssue[];
+  status: 'safe' | 'review-required' | 'unsafe';
+  scannedSources: string[];
+}
+
+export interface AIDetectionMetrics {
+  perplexity: number;
+  burstiness: number;
+  vocabularyDiversity: number;
+  clicheDensity: number;
+  overallRisk: 'low' | 'medium' | 'high';
+}
+
+// Book Target Types
+export interface BookTarget {
+  totalWords: number;
+  totalPages: number;
+  totalChapters: number;
+  avgWordsPerChapter: number;
+  currentProgress: {
+    completedChapters: number;
+    currentWordCount: number;
+    remainingWords: number;
+    adjustedAvgPerChapter: number;
+  };
 }

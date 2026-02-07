@@ -17,6 +17,10 @@ import RefactorerView from './components/RefactorerView';
 import LegalCounselView from './components/LegalCounselView';
 import MarketingView from './components/MarketingView';
 import IllustratorPanel from './components/IllustratorPanel';
+import BookLibrary from './components/BookLibrary';
+import CostDashboard from './components/CostDashboard';
+import OriginalityCheckView from './components/OriginalityCheckView';
+import ReviewDashboard from './components/ReviewDashboard';
 
 const STORAGE_KEY = 'kdp-author-pro-books';
 const STORAGE_ACTIVE = 'kdp-author-pro-active';
@@ -35,7 +39,7 @@ function loadActiveBookId(): string | null {
 const MAX_RETRIES = 5;
 
 const App: React.FC = () => {
-  const [view, setView] = useState<AppState>('dashboard');
+  const [view, setView] = useState<AppState>('book-library');
   const [books, setBooks] = useState<Book[]>(loadBooks);
   const [activeBookId, setActiveBookId] = useState<string | null>(loadActiveBookId);
   const [activeChapterIndex, setActiveChapterIndex] = useState(0);
@@ -47,6 +51,7 @@ const App: React.FC = () => {
   const [telemetry, setTelemetry] = useState<TelemetryMetrics>({
     actionLevel: 50, boredomLevel: 0, loreConsistency: 100, kdpCompliance: 100, activeAgent: 'Idle'
   });
+  const [editingIllustration, setEditingIllustration] = useState<{id: string; prompt: string} | null>(null);
   const booksRef = useRef(books);
   booksRef.current = books;
 
@@ -107,8 +112,16 @@ const App: React.FC = () => {
 
         // STEP 1: WRITER STAGE
         setTelemetry(p => ({ ...p, activeAgent: 'Writer' }));
-        addLog('Writer', `Generating draft using active context (Attempt ${attempts + 1})...`);
-        const content = await geminiService.writeChapter(currentBook.chapters[chapterIndex], currentBook.metadata, activeLore, fixInstruction);
+
+        // Calculate target word count for this chapter
+        const targetForThisChapter =
+          currentBook.chapters[chapterIndex].targetWordCount ||  // Prefer stored target
+          currentBook.target?.currentProgress.adjustedAvgPerChapter ||  // Use adjusted average
+          currentBook.target?.avgWordsPerChapter ||  // Fallback to initial average
+          5000;  // Absolute fallback
+
+        addLog('Writer', `Hedef: ~${targetForThisChapter} kelime (Deneme ${attempts + 1})...`);
+        const content = await geminiService.writeChapter(currentBook.chapters[chapterIndex], currentBook.metadata, activeLore, targetForThisChapter, fixInstruction);
         
         // STEP 2: AUDITOR STAGE (Consistency Check)
         setTelemetry(p => ({ ...p, activeAgent: 'Auditor' }));
@@ -256,25 +269,85 @@ const App: React.FC = () => {
     if (!pendingStrategy) return;
     const { strategy, title, language } = pendingStrategy;
     const bookId = crypto.randomUUID();
-    
+
     setIsGenerating(true);
     setView('orchestrator');
 
     try {
       const outline = await geminiService.generateOutline(title, strategy, language, length);
+
+      // Calculate target based on length
+      const targetMap = {
+        short: { words: 10000, pages: 40, chapters: outline.length },
+        standard: { words: 37500, pages: 150, chapters: outline.length },
+        long: { words: 75000, pages: 300, chapters: outline.length }
+      };
+      const target = targetMap[length];
+      const avgWordsPerChapter = Math.round(target.words / target.chapters);
+
       const newBook: Book = {
         id: bookId,
         metadata: { title, subtitle: "", description: strategy.marketAnalysis, keywords: strategy.seoKeywords, categories: [], targetAudience: strategy.targetAudience, language, strategy, tone, targetLength: length },
-        chapters: outline.map(ch => ({ id: crypto.randomUUID(), title: ch.title || "Untitled", description: ch.description, content: "", wordCount: 0, status: 'empty' })),
-        illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], createdAt: Date.now(), updatedAt: Date.now()
+        chapters: outline.map(ch => ({
+          id: crypto.randomUUID(),
+          title: ch.title || "Untitled",
+          description: ch.description,
+          content: "",
+          wordCount: 0,
+          targetWordCount: avgWordsPerChapter,  // Store target for each chapter
+          status: 'empty'
+        })),
+        illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], originalityIssues: [],
+        target: {
+          totalWords: target.words,
+          totalPages: target.pages,
+          totalChapters: target.chapters,
+          avgWordsPerChapter,
+          currentProgress: {
+            completedChapters: 0,
+            currentWordCount: 0,
+            remainingWords: target.words,
+            adjustedAvgPerChapter: avgWordsPerChapter,
+          },
+        },
+        createdAt: Date.now(), updatedAt: Date.now()
       };
-      
+
       setBooks(prev => [...prev, newBook]);
       booksRef.current = [...booksRef.current, newBook];
       setActiveBookId(bookId);
 
       for (let i = 0; i < newBook.chapters.length; i++) {
         await runChapterLoop(bookId, i);
+
+        // Update BookTarget progress
+        const currentBook = booksRef.current.find(b => b.id === bookId);
+        if (currentBook?.target) {
+          const completedChapters = currentBook.chapters.filter(c => c.status === 'completed').length;
+          const currentWordCount = currentBook.chapters
+            .filter(c => c.status === 'completed')
+            .reduce((sum, c) => sum + c.wordCount, 0);
+          const remainingWords = currentBook.target.totalWords - currentWordCount;
+          const remainingChapters = currentBook.target.totalChapters - completedChapters;
+          const adjustedAvg = remainingChapters > 0
+            ? Math.round(remainingWords / remainingChapters)
+            : 0;
+
+          updateBook(bookId, b => ({
+            ...b,
+            target: b.target ? {
+              ...b.target,
+              currentProgress: {
+                completedChapters,
+                currentWordCount,
+                remainingWords,
+                adjustedAvgPerChapter: adjustedAvg,
+              },
+            } : b.target,
+          }));
+
+          addLog('System Monitor', `İlerleme: ${completedChapters}/${currentBook.target.totalChapters} bölüm, ${currentWordCount.toLocaleString()}/${currentBook.target.totalWords.toLocaleString()} kelime (%${Math.round((currentWordCount / currentBook.target.totalWords) * 100)})`, 'info');
+        }
       }
     } finally {
       setIsGenerating(false);
@@ -333,27 +406,27 @@ const App: React.FC = () => {
 
     const newBook: Book = {
       id: newBookId,
-      metadata: { 
-        title: analysis.title, 
-        subtitle: "Revize Edilen Sürüm", 
-        description: analysis.summary, 
-        keywords: [], 
-        categories: [], 
-        targetAudience: "Genel", 
-        language: selectedLanguage, 
+      metadata: {
+        title: analysis.title,
+        subtitle: "Revize Edilen Sürüm",
+        description: analysis.summary,
+        keywords: [],
+        categories: [],
+        targetAudience: "Genel",
+        language: selectedLanguage,
         tone: analysis.currentTone,
-        targetLength: "standard", 
+        targetLength: "standard",
         strategy: {
             niche: analysis.detectedNiche,
-            genre: "Genel", 
-            targetAudience: "Genel", 
+            genre: "Genel",
+            targetAudience: "Genel",
             pageCountGoal: initialChapters.length * 50, // Bölüm sayısına göre güncellendi
             marketAnalysis: analysis.summary,
-            seoKeywords: [], 
+            seoKeywords: [],
         }
       },
       chapters: initialChapters,
-      illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], createdAt: Date.now(), updatedAt: Date.now()
+      illustrations: [], trailers: [], loreBible: [], audits: [], legalAudits: [], originalityScans: [], originalityIssues: [], createdAt: Date.now(), updatedAt: Date.now()
     };
 
     setBooks(prev => [...prev, newBook]);
@@ -478,13 +551,13 @@ const App: React.FC = () => {
     if (!activeBook) return;
     setIsGenerating(true);
     addLog('Illustrator', 'Generating KDP cover concept using Flux 1.1 Pro...', 'info');
-    
+
     try {
       // Prompt oluşturma (Normalde AI ajanı yapmalı, şimdilik basit bir şablon)
       const prompt = `Professional book cover for "${activeBook.metadata.title}". ${activeBook.metadata.description.slice(0, 100)}. Genre: ${activeBook.metadata.strategy?.niche || 'Non-fiction'}. High resolution, cinematic lighting, 8k, typography integration space.`;
-      
+
       const imageUrl = await orchestratorService.generateImage(prompt);
-      
+
       const newIllustration = {
         id: crypto.randomUUID(),
         url: imageUrl,
@@ -497,13 +570,50 @@ const App: React.FC = () => {
         ...b,
         illustrations: [newIllustration, ...b.illustrations]
       }));
-      
+
       addLog('Illustrator', 'Cover concept generated successfully.', 'success');
     } catch (e: any) {
       addLog('Illustrator', `Generation failed: ${e.message}`, 'critical');
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleEditIllustration = (id: string, currentPrompt: string) => {
+    setEditingIllustration({ id, prompt: currentPrompt });
+    addLog('Illustrator', 'Kapak tasarımı düzenleme moduna alındı', 'info');
+  };
+
+  const handleConfirmEditIllustration = async (editedPrompt: string) => {
+    if (!activeBook || !editingIllustration) return;
+
+    setIsGenerating(true);
+    addLog('Illustrator', 'Düzenlenmiş prompt ile yeni tasarım oluşturuluyor...', 'info');
+
+    try {
+      const imageUrl = await orchestratorService.generateImage(editedPrompt);
+
+      updateBook(activeBook.id, b => {
+        const illustrations = b.illustrations.map(ill =>
+          ill.id === editingIllustration.id
+            ? { ...ill, url: imageUrl, prompt: editedPrompt, createdAt: Date.now() }
+            : ill
+        );
+        return { ...b, illustrations };
+      });
+
+      addLog('Illustrator', 'Tasarım başarıyla güncellendi', 'success');
+      setEditingIllustration(null);
+    } catch (e: any) {
+      addLog('Illustrator', `Güncelleme başarısız: ${e.message}`, 'critical');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleCancelEditIllustration = () => {
+    setEditingIllustration(null);
+    addLog('Illustrator', 'Düzenleme iptal edildi', 'info');
   };
 
   // --- Marketing: Trailer & Launch Kit ---
@@ -580,11 +690,40 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSelectBook = (bookId: string) => {
+    setActiveBookId(bookId);
+    setActiveChapterIndex(0);
+    setView('editor');
+  };
+
+  const handleDeleteBook = (bookId: string) => {
+    setBooks(prev => prev.filter(b => b.id !== bookId));
+    if (activeBookId === bookId) {
+      setActiveBookId(null);
+      setView('book-library');
+    }
+  };
+
+  const handleRegenerateChapter = async (chapterIndex: number) => {
+    if (!activeBook) return;
+    await runChapterLoop(activeBook.id, chapterIndex);
+  };
+
+  const handleEditChapter = (chapterIndex: number) => {
+    setActiveChapterIndex(chapterIndex);
+    setView('editor');
+  };
+
+  const handleApproveAll = () => {
+    // After approving all chapters, navigate to export or other view
+    setView('export-lab');
+  };
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-[#0f172a] text-slate-100 font-sans">
       <Header view={view} setView={setView} bookTitle={activeBook?.metadata.title} hasBook={!!activeBook} onExport={() => {}} onExportPDF={() => setView('export-lab')} saveStatus={saveStatus} backgroundTasksCount={isGenerating ? 1 : 0} />
       <div className="flex flex-1 overflow-hidden">
-        {activeBook && !['dashboard', 'strategy', 'orchestrator', 'book-config', 'book-refactorer'].includes(view) && (
+        {activeBook && !['dashboard', 'strategy', 'orchestrator', 'book-config', 'book-refactorer', 'book-library', 'cost-dashboard', 'originality-check', 'review-dashboard'].includes(view) && (
           <Sidebar
             activeBook={activeBook}
             activeChapterIndex={activeChapterIndex}
@@ -595,6 +734,37 @@ const App: React.FC = () => {
           />
         )}
         <main className="flex-1 overflow-y-auto bg-slate-50 text-slate-900 relative">
+          {view === 'book-library' && (
+            <BookLibrary
+              books={books}
+              onSelectBook={handleSelectBook}
+              onNewBook={() => setView('strategy')}
+              onDeleteBook={handleDeleteBook}
+            />
+          )}
+          {view === 'cost-dashboard' && (
+            <CostDashboard
+              book={activeBook || undefined}
+              onBack={() => setView(activeBook ? 'editor' : 'book-library')}
+            />
+          )}
+          {view === 'originality-check' && activeBook && (
+            <OriginalityCheckView
+              book={activeBook}
+              onBack={() => setView('editor')}
+              updateBook={updateBook}
+            />
+          )}
+          {view === 'review-dashboard' && activeBook && (
+            <ReviewDashboard
+              book={activeBook}
+              onBack={() => setView('editor')}
+              onRegenerateChapter={handleRegenerateChapter}
+              onEditChapter={handleEditChapter}
+              onApproveAll={handleApproveAll}
+              onPreview={() => setView('preview')}
+            />
+          )}
           {view === 'dashboard' && <Dashboard onNewBook={() => setView('strategy')} onImportBook={() => setView('book-refactorer')} activeBook={activeBook} onContinue={() => setView('editor')} onSelectResource={() => {}} />}
           {view === 'strategy' && <StrategyPlanner onStrategySelected={(s, t, l) => { setPendingStrategy({ strategy: s, title: t, language: l }); setView('book-config'); }} addLog={addLog} logs={logs} />}
           {view === 'book-config' && pendingStrategy && <BookConfigView title={pendingStrategy.title} onStart={handleStartProduction} onBack={() => setView('strategy')} />}
@@ -612,7 +782,7 @@ const App: React.FC = () => {
               logs={logs}
             />
           )}
-          {view === 'preview' && activeBook && <Preview book={activeBook} />}
+          {view === 'preview' && activeBook && <Preview book={activeBook} onBack={() => setView('editor')} />}
           {view === 'export-lab' && activeBook && <ExportLab book={activeBook} onBack={() => setView('editor')} />}
           {view === 'lore-bible' && activeBook && <LoreBibleView lore={activeBook.loreBible} onRefresh={() => {}} isGenerating={isGenerating} />}
           {view === 'book-refactorer' && <RefactorerView onRefactorStart={handleRefactorStart} addLog={addLog} />}
@@ -620,11 +790,11 @@ const App: React.FC = () => {
             <IllustratorPanel
               book={activeBook}
               onGenerate={handleGenerateIllustration}
-              onEdit={() => {}}
+              onEdit={handleEditIllustration}
               isGenerating={isGenerating}
-              pendingPrompt={null}
-              onConfirm={() => {}}
-              onCancel={() => {}}
+              pendingPrompt={editingIllustration}
+              onConfirm={handleConfirmEditIllustration}
+              onCancel={handleCancelEditIllustration}
             />
           )}
           {view === 'legal-audit' && activeBook && (
