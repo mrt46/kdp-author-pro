@@ -26,15 +26,15 @@ class OrchestratorService {
   }
 
   public refreshApiKeys() {
-    // Önce .env'den yükle
+    // Önce .env'den yükle (Vite kullanıyoruz, import.meta.env.VITE_* formatı gerekli)
     this.apiKeys = {
-      google: (process.env.GEMINI_API_KEY || process.env.API_KEY) as string,
-      openai: process.env.OPENAI_API_KEY as string,
-      anthropic: process.env.ANTHROPIC_API_KEY as string,
-      deepseek: process.env.DEEPSEEK_API_KEY as string,
-      meta: process.env.META_API_KEY as string,
-      "fal-ai": process.env.FAL_AI_KEY as string,
-      replicate: process.env.REPLICATE_API_TOKEN as string,
+      google: (import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.VITE_GOOGLE_API_KEY || import.meta.env.VITE_API_KEY) as string,
+      openai: import.meta.env.VITE_OPENAI_API_KEY as string,
+      anthropic: import.meta.env.VITE_ANTHROPIC_API_KEY as string,
+      deepseek: import.meta.env.VITE_DEEPSEEK_API_KEY as string,
+      meta: import.meta.env.VITE_META_API_KEY as string,
+      "fal-ai": (import.meta.env.VITE_FAL_API_KEY || import.meta.env.VITE_FAL_AI_KEY) as string,
+      replicate: (import.meta.env.VITE_REPLICATE_API_KEY || import.meta.env.VITE_REPLICATE_API_TOKEN) as string,
     };
 
     // Sonra LocalStorage'dan (varsa) üzerine yaz
